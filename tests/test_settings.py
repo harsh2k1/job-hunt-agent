@@ -1,8 +1,8 @@
 import pytest
 from pydantic import ValidationError
 
-from common.settings import dynaconf_settings, settings, validate_settings
-from common.settings_schema import HttpSettings
+from job_hunt.common.settings import dynaconf_settings, settings, validate_settings
+from job_hunt.common.settings_schema import HttpSettings
 
 
 def test_settings_load_the_testing_environment():

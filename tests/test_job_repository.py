@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone
 
-from job_store.job_repository import LOOKUP_BATCH_SIZE, UPDATABLE_FIELDS, JobRepository
-from job_store.models import FetchedJob
+from job_hunt.job_store.job_repository import LOOKUP_BATCH_SIZE, UPDATABLE_FIELDS, JobRepository
+from job_hunt.job_store.models import FetchedJob
 
 
 def make_fetched_job(source_job_id: str = "123", title: str = "Graduate Data Scientist") -> FetchedJob:

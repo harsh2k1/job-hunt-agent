@@ -1,9 +1,9 @@
 import pytest
 
-from common.cache import Cache, CacheFactory
-from common.cache.backends import CACHE_MISS, InMemoryCacheBackend, cache_backend_registry
-from common.settings import settings
-from common.settings_schema import DiskCacheSettings
+from job_hunt.common.cache import Cache, CacheFactory
+from job_hunt.common.cache.backends import CACHE_MISS, InMemoryCacheBackend, cache_backend_registry
+from job_hunt.common.settings import settings
+from job_hunt.common.settings_schema import DiskCacheSettings
 
 
 def test_written_value_reads_back(cache):

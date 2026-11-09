@@ -1,6 +1,6 @@
 import pytest
 
-from common.registry import Registry, UnknownRegistryEntryError
+from job_hunt.common.registry import Registry, UnknownRegistryEntryError
 
 
 def test_registered_entry_is_returned_by_name():

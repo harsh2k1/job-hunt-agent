@@ -1,0 +1,87 @@
+import argparse
+
+from job_hunt.cli.cli_command import EXIT_FAILURE, EXIT_SUCCESS, CliCommand, register_cli_command
+from job_hunt.common.settings import settings
+from job_hunt.company_discovery.seed_list import load_seed_companies
+from job_hunt.job_sources.ats_boards.ats_board_links import AtsBoardLink, find_ats_board
+from job_hunt.job_store.company_repository import CompanyRepository
+from job_hunt.job_store.models import AtsPlatform, DiscoveredCompany
+
+ADDED_BY_HAND = "added by hand"
+
+
+@register_cli_command
+class AddCompanyCommand(CliCommand):
+    name = "add-company"
+    summary = "start reading a company's job board, from its URL or ATS + slug"
+
+    def add_arguments(self, parser: argparse.ArgumentParser) -> None:
+        parser.add_argument("--name", required=True, help="company name as it should appear")
+        board = parser.add_mutually_exclusive_group(required=True)
+        board.add_argument(
+            "--board-url",
+            help="any link to the board or one of its jobs, e.g. https://jobs.ashbyhq.com/perplexity",
+        )
+        board.add_argument(
+            "--ats", choices=[platform.value for platform in AtsPlatform], help="the ATS, with --slug"
+        )
+        parser.add_argument("--slug", help="the board's slug on that ATS, with --ats")
+
+    def run(self, args: argparse.Namespace) -> int:
+        board_link = self._board_from_arguments(args)
+        if board_link is None:
+            print("That URL isn't a board on any supported ATS (or --ats was given without --slug).")
+            return EXIT_FAILURE
+        company = DiscoveredCompany(
+            name=args.name,
+            ats_platform=board_link.ats_platform,
+            ats_board_slug=board_link.ats_board_slug,
+            discovered_via=ADDED_BY_HAND,
+        )
+        if CompanyRepository().add_company_if_new(company):
+            print(f"Tracking {company.name} on {company.ats_platform.value} ({company.ats_board_slug}).")
+        else:
+            print(f"{company.ats_platform.value} board {company.ats_board_slug!r} is already on the list.")
+        return EXIT_SUCCESS
+
+    @staticmethod
+    def _board_from_arguments(args: argparse.Namespace) -> AtsBoardLink | None:
+        if args.board_url:
+            return find_ats_board(args.board_url)
+        if not args.slug:
+            return None
+        return AtsBoardLink(ats_platform=AtsPlatform(args.ats), ats_board_slug=args.slug.lower())
+
+
+@register_cli_command
+class SeedCompaniesCommand(CliCommand):
+    name = "seed-companies"
+    summary = "add every company in the seed list (safe to rerun; existing boards are skipped)"
+
+    def run(self, args: argparse.Namespace) -> int:
+        repository = CompanyRepository()
+        seed_companies = load_seed_companies(settings.companies.seed_list_path)
+        added = sum(repository.add_company_if_new(company) for company in seed_companies)
+        print(f"Added {added} of {len(seed_companies)} seed companies; the rest were already tracked.")
+        return EXIT_SUCCESS
+
+
+@register_cli_command
+class ListCompaniesCommand(CliCommand):
+    name = "list-companies"
+    summary = "companies whose job boards are read on every fetch"
+
+    def add_arguments(self, parser: argparse.ArgumentParser) -> None:
+        parser.add_argument(
+            "--ats", choices=[platform.value for platform in AtsPlatform], help="only this ATS"
+        )
+
+    def run(self, args: argparse.Namespace) -> int:
+        ats_platform = AtsPlatform(args.ats) if args.ats else None
+        companies = CompanyRepository().list_active_companies(ats_platform)
+        if not companies:
+            print("No companies tracked yet.")
+        for company in companies:
+            platform = company.ats_platform.value
+            print(f"{company.name:<30} {platform:<16} {company.ats_board_slug:<30} {company.discovered_via}")
+        return EXIT_SUCCESS

@@ -1,0 +1,495 @@
+# Company job boards read on every fetch, loaded with `job-hunt seed-companies`.
+#
+# Each one is a London-hiring AI / data / tech employer that:
+#   - holds a Skilled Worker sponsor licence (Home Office register, 2026-11-09)
+#   - has a public board on a supported ATS with at least one UK role
+#     when this list was made
+# The comment under each entry is the register name it was matched to and
+# how many roles the board had (all / UK) on 2026-11-09.
+#
+# Add more by hand in the same shape; slugs are case-insensitive.
+
+- name: Accurx
+  ats: ashby
+  slug: accurx
+  # AccuRx Limited | 15 roles / 15 UK
+- name: Airbnb
+  ats: greenhouse
+  slug: airbnb
+  # Airbnb UK Limited | 203 roles / 12 UK
+- name: Airwallex
+  ats: ashby
+  slug: airwallex
+  # Airwallex (UK) Limited | 484 roles / 63 UK
+- name: Algolia
+  ats: greenhouse
+  slug: algolia
+  # Algolia Limited | 28 roles / 6 UK
+- name: Allica Bank
+  ats: ashby
+  slug: allica-bank
+  # Allica Bank | 33 roles / 18 UK
+- name: Amplitude
+  ats: ashby
+  slug: amplitude
+  # Amplitude Analytics Limited | 51 roles / 1 UK
+- name: Anaplan
+  ats: greenhouse
+  slug: anaplan
+  # Anaplan Limited | 165 roles / 28 UK
+- name: Anthropic
+  ats: greenhouse
+  slug: anthropic
+  # Anthropic Limited | 675 roles / 42 UK
+- name: Apollo Research
+  ats: lever
+  slug: apolloresearch
+  # Apollo Research AI Ltd | 12 roles / 12 UK
+- name: Basecamp Research
+  ats: ashby
+  slug: basecamp-research
+  # Basecamp Research | 10 roles / 4 UK
+- name: Beamery
+  ats: smartrecruiters
+  slug: beamery
+  # Beamery Ltd | 135 roles / 38 UK
+- name: Behavox
+  ats: greenhouse
+  slug: behavox
+  # Behavox Ltd | 24 roles / 4 UK
+- name: Birdie
+  ats: ashby
+  slug: birdie
+  # Birdie Care Services Limited | 2 roles / 2 UK
+- name: Braze
+  ats: greenhouse
+  slug: braze
+  # Braze Limited | 360 roles / 23 UK
+- name: CarbonChain
+  ats: greenhouse
+  slug: carbonchain
+  # CarbonChain.io Limited | 3 roles / 3 UK
+- name: Causaly
+  ats: ashby
+  slug: causaly
+  # Causaly Ltd | 9 roles / 6 UK
+- name: Celonis
+  ats: greenhouse
+  slug: celonis
+  # Celonis Ltd | 236 roles / 19 UK
+- name: ClearBank
+  ats: ashby
+  slug: clearbank
+  # ClearBank Group Holdings Limited | 10 roles / 10 UK
+- name: Cockroach Labs
+  ats: greenhouse
+  slug: cockroachlabs
+  # Cockroach Labs UK Limited | 12 roles / 2 UK
+- name: Cognism
+  ats: greenhouse
+  slug: cognism
+  # Cognism Limited | 20 roles / 8 UK
+- name: Cohere
+  ats: ashby
+  slug: cohere
+  # Cohere UK Ltd | 124 roles / 36 UK
+- name: Contentful
+  ats: greenhouse
+  slug: contentful
+  # CONTENTFUL (UK) LIMITED | 31 roles / 13 UK
+- name: Contentsquare
+  ats: lever
+  slug: contentsquare
+  # Contentsquare | 28 roles / 4 UK
+- name: Culture Amp
+  ats: greenhouse
+  slug: cultureamp
+  # Culture Amp Limited | 29 roles / 4 UK
+- name: Databricks
+  ats: greenhouse
+  slug: databricks
+  # Databricks UK Limited | 922 roles / 56 UK
+- name: Datadog
+  ats: greenhouse
+  slug: datadog
+  # Datadog Ireland Limited | 402 roles / 17 UK
+- name: Dataiku
+  ats: greenhouse
+  slug: dataiku
+  # Dataiku Ltd | 14 roles / 2 UK
+- name: Deliveroo
+  ats: greenhouse
+  slug: deliveroo
+  # Roofoods Ltd t/a Deliveroo | 196 roles / 126 UK
+- name: Dropbox
+  ats: greenhouse
+  slug: dropbox
+  # Dropbox Fuels Limited; Dropbox UK Online Limited | 33 roles / 1 UK
+- name: Duolingo
+  ats: greenhouse
+  slug: duolingo
+  # Duolingo UK Limited | 59 roles / 2 UK
+- name: Elastic
+  ats: greenhouse
+  slug: elastic
+  # Elasticsearch Limited | 427 roles / 30 UK
+- name: ElevenLabs
+  ats: ashby
+  slug: elevenlabs
+  # Eleven Labs Ltd | 136 roles / 48 UK
+- name: Elliptic
+  ats: ashby
+  slug: elliptic
+  # Elliptic Enterprises Limited | 24 roles / 8 UK
+- name: Encord
+  ats: ashby
+  slug: encord
+  # Cord Technologies Limited | 39 roles / 34 UK
+- name: Faculty
+  ats: ashby
+  slug: faculty
+  # Faculty Science Limited | 96 roles / 90 UK
+- name: Farfetch
+  ats: ashby
+  slug: farfetch
+  # Farfetch UK Limited | 49 roles / 11 UK
+- name: Feedzai
+  ats: greenhouse
+  slug: feedzai
+  # Feedzai UK Limited | 11 roles / 1 UK
+- name: Figma
+  ats: greenhouse
+  slug: figma
+  # Figma UK Limited | 146 roles / 20 UK
+- name: Fivetran
+  ats: greenhouse
+  slug: fivetran
+  # Fivetran UK Limited | 170 roles / 4 UK
+- name: Flagstone
+  ats: ashby
+  slug: flagstone
+  # Flagstone Group Limited | 7 roles / 7 UK
+- name: Flo Health
+  ats: greenhouse
+  slug: flohealth
+  # Flo Health UK Limited | 29 roles / 20 UK
+- name: Flow Traders
+  ats: greenhouse
+  slug: flowtraders
+  # Flow Traders UK Services Ltd | 41 roles / 3 UK
+- name: Fluidstack
+  ats: ashby
+  slug: fluidstack
+  # Fluidstack Ltd | 251 roles / 3 UK
+- name: Fractile
+  ats: ashby
+  slug: fractile
+  # Fractile Ltd | 26 roles / 24 UK
+- name: Freetrade
+  ats: ashby
+  slug: freetrade
+  # Freetrade Limited | 3 roles / 2 UK
+- name: Funding Circle
+  ats: ashby
+  slug: fundingcircle
+  # FUNDING CIRCLE LTD | 28 roles / 28 UK
+- name: GoCardless
+  ats: greenhouse
+  slug: gocardless
+  # GoCardless Limited | 29 roles / 9 UK
+- name: Grafana Labs
+  ats: greenhouse
+  slug: grafanalabs
+  # Grafana Labs Ltd | 132 roles / 14 UK
+- name: Granola
+  ats: ashby
+  slug: granola
+  # Granola Labs | 20 roles / 14 UK
+- name: Graphcore
+  ats: greenhouse
+  slug: graphcore
+  # Graphcore Limited | 202 roles / 117 UK
+- name: Harvey
+  ats: ashby
+  slug: harvey
+  # Harvey AI UK Ltd | 374 roles / 30 UK
+- name: Helsing
+  ats: greenhouse
+  slug: helsing
+  # Helsing Limited | 167 roles / 35 UK
+- name: Intercom
+  ats: greenhouse
+  slug: intercom
+  # Intercom Software UK Limited | 108 roles / 28 UK
+- name: Isomorphic Labs
+  ats: greenhouse
+  slug: isomorphiclabs
+  # Isomorphic Labs Limited | 43 roles / 30 UK
+- name: Jane Street
+  ats: greenhouse
+  slug: janestreet
+  # Jane Street Europe Limited | 220 roles / 60 UK
+- name: Jump Trading
+  ats: greenhouse
+  slug: jumptrading
+  # Jump Trading International Limited | 92 roles / 23 UK
+- name: Kpler
+  ats: lever
+  slug: kpler
+  # Kpler Limited | 114 roles / 37 UK
+- name: Latent Labs
+  ats: ashby
+  slug: latentlabs
+  # Latent Labs Limited | 8 roles / 4 UK
+- name: Ledger
+  ats: ashby
+  slug: ledger
+  # Ledger Technologies UK LTD | 13 roles / 3 UK
+- name: Lendable
+  ats: ashby
+  slug: lendable
+  # Lendable Operations Ltd | 78 roles / 65 UK
+- name: Lovable
+  ats: ashby
+  slug: lovable
+  # Lovable Labs UK Limited | 79 roles / 31 UK
+- name: Lyst
+  ats: smartrecruiters
+  slug: lyst
+  # Lyst Ltd | 10 roles / 10 UK
+- name: Man Group
+  ats: greenhouse
+  slug: mangroup
+  # MAN CORPORATION LIMITED; Man Group Services Limited | 72 roles / 28 UK
+- name: Marshmallow
+  ats: ashby
+  slug: marshmallow
+  # Marshmallow Technology Ltd | 14 roles / 13 UK
+- name: Mimica
+  ats: ashby
+  slug: mimica
+  # Mimica Automation Ltd.; Mimica Lab Ltd. | 17 roles / 7 UK
+- name: Miro
+  ats: ashby
+  slug: miro
+  # Miro Technologies Limited | 18 roles / 1 UK
+- name: Mixpanel
+  ats: greenhouse
+  slug: mixpanel
+  # Mixpanel UK Ltd | 42 roles / 4 UK
+- name: MongoDB
+  ats: greenhouse
+  slug: mongodb
+  # MongoDB UK Limited | 375 roles / 10 UK
+- name: Moniepoint
+  ats: greenhouse
+  slug: moniepoint
+  # MONIEPOINT TECHNOLOGIES UK LTD; Moniepoint UK Limited | 129 roles / 9 UK
+- name: Monzo
+  ats: greenhouse
+  slug: monzo
+  # Monzo Bank Ltd | 65 roles / 55 UK
+- name: Multiverse
+  ats: ashby
+  slug: multiverse
+  # Multiverse Group Limited | 26 roles / 26 UK
+- name: Neo4j
+  ats: greenhouse
+  slug: neo4j
+  # NEO4J UK LIMITED | 61 roles / 19 UK
+- name: OakNorth
+  ats: ashby
+  slug: oaknorth
+  # Oaknorth (UK) Limited | 26 roles / 12 UK
+- name: Okta
+  ats: greenhouse
+  slug: okta
+  # Okta UK Ltd | 376 roles / 7 UK
+- name: OpenAI
+  ats: ashby
+  slug: openai
+  # OpenAI UK Ltd | 812 roles / 39 UK
+- name: Owkin
+  ats: ashby
+  slug: owkin
+  # Owkin UK Ltd | 10 roles / 6 UK
+- name: PagerDuty
+  ats: greenhouse
+  slug: pagerduty
+  # PagerDuty Limited | 47 roles / 2 UK
+- name: Palantir
+  ats: lever
+  slug: palantir
+  # Palantir Technologies UK Limited; Palantir UK Limited | 304 roles / 44 UK
+- name: Peloton
+  ats: greenhouse
+  slug: peloton
+  # Peloton Enterprises UK Ltd; Peloton Interactive UK Limited | 44 roles / 3 UK
+- name: Perplexity
+  ats: ashby
+  slug: perplexity
+  # Perplexity AI Ltd | 138 roles / 25 UK
+- name: PhysicsX
+  ats: greenhouse
+  slug: physicsx
+  # PhysicsX Limited | 41 roles / 12 UK
+- name: Pinterest
+  ats: greenhouse
+  slug: pinterest
+  # Pinterest UK | 167 roles / 6 UK
+- name: Pleo
+  ats: ashby
+  slug: pleo
+  # Pleo Technologies Limited; Pleo Technologies Ltd | 38 roles / 18 UK
+- name: Point72
+  ats: greenhouse
+  slug: point72
+  # Point72 UK Limited | 199 roles / 21 UK
+- name: PolyAI
+  ats: greenhouse
+  slug: polyai
+  # PolyAI Limited | 3 roles / 2 UK
+- name: Poolside
+  ats: ashby
+  slug: poolside
+  # Poolside AI Ltd | 4 roles / 1 UK
+- name: Prolific
+  ats: greenhouse
+  slug: prolific
+  # Prolific Academic Ltd; Prolific Glaze Ltd. | 25 roles / 12 UK
+- name: Quadrature Capital
+  ats: greenhouse
+  slug: quadraturecapital
+  # Quadrature Capital Limited | 3 roles / 3 UK
+- name: Quantcast
+  ats: ashby
+  slug: quantcast
+  # Quantcast Limited | 15 roles / 2 UK
+- name: Quantexa
+  ats: ashby
+  slug: quantexa
+  # Quantexa Ltd | 48 roles / 21 UK
+- name: Quantinuum
+  ats: lever_eu
+  slug: quantinuum
+  # Quantinuum Limited | 130 roles / 10 UK
+- name: Qube Research & Technologies
+  ats: greenhouse
+  slug: quberesearchandtechnologies
+  # Qube Research & Technologies Limited | 205 roles / 82 UK
+- name: Ramp
+  ats: ashby
+  slug: ramp
+  # Ramp Business UK Ltd | 168 roles / 10 UK
+- name: Relation Therapeutics
+  ats: ashby
+  slug: relationrx
+  # Relation Therapeutics Limited | 11 roles / 11 UK
+- name: Ripple
+  ats: greenhouse
+  slug: ripple
+  # Ripple Markets UK Ltd | 117 roles / 25 UK
+- name: Riverlane
+  ats: greenhouse
+  slug: riverlane
+  # Riverlane Ltd | 32 roles / 18 UK
+- name: Scale AI
+  ats: greenhouse
+  slug: scaleai
+  # Scale AI Limited | 168 roles / 26 UK
+- name: Schonfeld
+  ats: greenhouse
+  slug: schonfeld
+  # Schonfeld Strategic Advisors (UK) LLP | 67 roles / 15 UK
+- name: ServiceNow
+  ats: smartrecruiters
+  slug: servicenow
+  # ServiceNow UK Limited | 745 roles / 26 UK
+- name: Snowflake
+  ats: ashby
+  slug: snowflake
+  # Snowflake Computing U.K. Limited; Snowflake Gelato Group Ltd | 370 roles / 24 UK
+- name: Snyk
+  ats: ashby
+  slug: snyk
+  # Snyk Limited | 39 roles / 7 UK
+- name: Spotify
+  ats: lever
+  slug: spotify
+  # Spotify Limited | 85 roles / 41 UK
+- name: Squarepoint Capital
+  ats: greenhouse
+  slug: squarepointcapital
+  # Squarepoint Capital LLP | 90 roles / 66 UK
+- name: Stripe
+  ats: greenhouse
+  slug: stripe
+  # STRIPE CONSULTING LIMITED; Stripe Partners | 769 roles / 56 UK
+- name: Sylvera
+  ats: ashby
+  slug: sylvera
+  # Sylvera Ltd | 7 roles / 3 UK
+- name: Synthesia
+  ats: ashby
+  slug: synthesia
+  # Synthesia Limited | 32 roles / 19 UK
+- name: Thought Machine
+  ats: ashby
+  slug: thought-machine
+  # Thought Machine Group Limited | 31 roles / 12 UK
+- name: Tower Research Capital
+  ats: greenhouse
+  slug: towerresearchcapital
+  # Tower Research Capital Europe Limited | 92 roles / 9 UK
+- name: TrueLayer
+  ats: greenhouse
+  slug: truelayer
+  # TrueLayer Limited; TrueLayer Services Limited | 4 roles / 2 UK
+- name: Twilio
+  ats: greenhouse
+  slug: twilio
+  # Twilio UK Limited | 129 roles / 17 UK
+- name: Typeform
+  ats: greenhouse
+  slug: typeform
+  # Typeform UK Limited | 6 roles / 4 UK
+- name: UiPath
+  ats: ashby
+  slug: uipath
+  # UIPATH UK LIMITED | 103 roles / 7 UK
+- name: Unitary
+  ats: workable
+  slug: unitary
+  # Unitary Ltd | 1 roles / 1 UK
+- name: Vanta
+  ats: ashby
+  slug: vanta
+  # Vanta Technology UK Limited | 80 roles / 15 UK
+- name: Vercel
+  ats: greenhouse
+  slug: vercel
+  # Vercel UK Limited | 87 roles / 11 UK
+- name: Wayflyer
+  ats: ashby
+  slug: wayflyer
+  # Wayflyer UK Limited | 13 roles / 3 UK
+- name: Wayve
+  ats: ashby
+  slug: wayve
+  # Wayve Technologies Ltd | 172 roles / 60 UK
+- name: Winton
+  ats: greenhouse
+  slug: winton
+  # Winton Capital Management Ltd; Winton Specsavers Limited T/A Specsavers Opticians | 7 roles / 7 UK
+- name: Wise
+  ats: smartrecruiters
+  slug: wise
+  # UK Wise Group Ltd | 426 roles / 198 UK
+- name: Workato
+  ats: greenhouse
+  slug: workato
+  # Workato UK Ltd | 57 roles / 3 UK
+- name: Writer
+  ats: ashby
+  slug: writer
+  # Writer UK HQ Limited; Writer's Landing Ltd | 48 roles / 11 UK

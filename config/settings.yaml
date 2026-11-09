@@ -54,6 +54,104 @@ default:
     min_seconds_between_requests_to_same_host: 1.0
     user_agent: "job-hunt-agent/0.1 (personal job search)"
 
+  job_search:
+    # Job boards are searched for every term in every location. Kept broad on
+    # purpose: relevance filtering comes later, and a missed job costs more
+    # than an extra row.
+    role_terms:
+      - graduate data scientist
+      - data scientist
+      - data science intern
+      - data science graduate scheme
+      - graduate machine learning engineer
+      - machine learning engineer
+      - machine learning intern
+      - AI engineer
+      - AI graduate scheme
+      - applied scientist
+      - research engineer machine learning
+      - research scientist machine learning
+      - NLP engineer
+      - LLM engineer
+    locations:
+      - London
+    # "uk" matches "Remote - UK" but not "Ukraine"; postings with no location
+    # at all are kept so they can be checked by hand
+    target_location_keywords:
+      - london
+      - united kingdom
+      - uk
+      - england
+      - great britain
+    # daily runs overlap by design; already-seen jobs are only updated
+    max_posting_age_hours: 168
+    indeed_country: UK
+    search_radius_miles: 20
+
+  job_sources:
+    # big job boards, read through JobSpy
+    indeed:
+      enabled: true
+      results_per_search: 50
+    linkedin:
+      enabled: true
+      results_per_search: 25
+      fetch_descriptions: true
+    glassdoor:
+      # often blocked; turned on once it proves reliable
+      enabled: false
+      results_per_search: 25
+    google_jobs:
+      # JobSpy's Google scraper gets "no job data" back from Google for every
+      # query, including JobSpy's own example (checked 2026-11-09); back on
+      # once a JobSpy release fixes it
+      enabled: false
+      results_per_search: 30
+      search_term_template: "{role} jobs near {location} since last week"
+    # Google Jobs through SerpApi, which handles Google's CAPTCHAs (a browser
+    # from here gets one on the first request). Free plan: 250 searches a
+    # month, so 8 terms x 1 page a day fits. Needs api_key in .secrets.yaml.
+    serpapi_google_jobs:
+      enabled: true
+      api_key: null
+      search_terms:
+        - graduate data scientist
+        - data science graduate scheme 2027
+        - machine learning engineer graduate
+        - AI engineer graduate
+        - data science internship
+        - machine learning internship
+        - junior data scientist
+        - research engineer machine learning
+      location: London, England, United Kingdom
+      google_domain: google.co.uk
+      country_code: uk
+      pages_per_search: 1
+      searches_kept_in_reserve: 10
+      cache_ttl_hours: 20
+
+    # companies' own job boards, read for every tracked company on that ATS
+    greenhouse:
+      enabled: true
+    lever:
+      enabled: true
+    lever_eu:
+      enabled: true
+    ashby:
+      enabled: true
+    workable:
+      enabled: true
+    smartrecruiters:
+      enabled: true
+      country_code: gb
+      page_size: 100
+
+  companies:
+    # London AI / data / tech employers that hold a Skilled Worker sponsor
+    # licence and have a board on a supported ATS; checked against the Home
+    # Office register before being added here
+    seed_list_path: "@format {this.REPO_ROOT}/config/seed_companies.yaml"
+
 # used by the test suite; anything that writes goes to a throwaway folder
 testing:
   logging:

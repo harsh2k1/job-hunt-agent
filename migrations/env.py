@@ -2,10 +2,10 @@ from alembic import context
 from sqlalchemy import Connection
 from sqlmodel import SQLModel
 
-from common.database import get_database
+from job_hunt.common.database import get_database
 
 # registers every table on SQLModel.metadata, which autogenerate compares against
-import job_store.models  # noqa: F401  # isort: skip
+import job_hunt.job_store.models  # noqa: F401  # isort: skip
 
 target_metadata = SQLModel.metadata
 

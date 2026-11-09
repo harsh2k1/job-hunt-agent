@@ -3,13 +3,16 @@ from pydantic import SecretStr
 from sqlalchemy import text
 from sqlmodel import select
 
-from common.database import DatabaseFactory
-from common.database.backends import PostgresBackend, database_backend_registry
-from common.database.schema_migrations import find_models_missing_from_migrations, upgrade_schema_to_latest
-from common.registry import UnknownRegistryEntryError
-from common.settings import settings
-from common.settings_schema import PostgresSettings, SqliteSettings
-from job_store.models import AtsPlatform, TrackedCompany
+from job_hunt.common.database import DatabaseFactory
+from job_hunt.common.database.backends import PostgresBackend, database_backend_registry
+from job_hunt.common.database.schema_migrations import (
+    find_models_missing_from_migrations,
+    upgrade_schema_to_latest,
+)
+from job_hunt.common.registry import UnknownRegistryEntryError
+from job_hunt.common.settings import settings
+from job_hunt.common.settings_schema import PostgresSettings, SqliteSettings
+from job_hunt.job_store.models import AtsPlatform, TrackedCompany
 
 
 def test_sqlite_database_is_created_with_its_folder(tmp_path):
@@ -37,15 +40,17 @@ def test_sqlite_connections_enforce_foreign_keys(database):
 
 
 def test_session_scope_rolls_back_when_the_block_raises(database):
-    with pytest.raises(RuntimeError):
-        with database.session_scope() as session:
-            session.add(
-                TrackedCompany(
-                    name="Wayve", ats_platform=AtsPlatform.GREENHOUSE, ats_board_slug="wayve", discovered_via="test"
-                )
+    with pytest.raises(RuntimeError), database.session_scope() as session:
+        session.add(
+            TrackedCompany(
+                name="Wayve",
+                ats_platform=AtsPlatform.GREENHOUSE,
+                ats_board_slug="wayve",
+                discovered_via="test",
             )
-            session.flush()
-            raise RuntimeError("something failed halfway")
+        )
+        session.flush()
+        raise RuntimeError("something failed halfway")
 
     with database.session_scope() as session:
         assert session.exec(select(TrackedCompany)).all() == []
@@ -64,7 +69,9 @@ def test_postgres_url_is_built_from_its_settings():
     backend = PostgresBackend(settings.database.model_copy(update={"postgres": postgres_settings}))
     url = backend.build_connection_url()
 
-    assert url.render_as_string(hide_password=False) == "postgresql+psycopg://agent:s3cret@db.internal:6543/jobs"
+    assert (
+        url.render_as_string(hide_password=False) == "postgresql+psycopg://agent:s3cret@db.internal:6543/jobs"
+    )
     # the password must not leak into logs or error messages
     assert "s3cret" not in str(url)
     assert backend.build_engine_options()["pool_size"] == 2

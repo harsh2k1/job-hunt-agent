@@ -1,7 +1,7 @@
 import pytest
 
-from job_store.company_repository import CompanyNotFoundError, CompanyRepository
-from job_store.models import AtsPlatform, DiscoveredCompany
+from job_hunt.job_store.company_repository import CompanyNotFoundError, CompanyRepository
+from job_hunt.job_store.models import AtsPlatform, DiscoveredCompany
 
 
 def make_company(slug: str, platform: AtsPlatform = AtsPlatform.ASHBY) -> DiscoveredCompany:
