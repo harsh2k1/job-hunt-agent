@@ -218,3 +218,18 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Local planning notes
+notes/
+
+# Secrets (dynaconf)
+.secrets.yaml
+config/.secrets.yaml
+
+# Local config overrides
+config/settings.local.yaml
+
+# Runtime output: the database, cached responses, logs, test scratch
+data/
+logs/
+.pytest_tmp/

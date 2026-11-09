@@ -1,0 +1,72 @@
+# Defaults for every run. Ways to override, later ones win:
+#   - another environment section below, picked with JOBHUNT_ENV=<name>
+#     (only the keys that change; the rest comes from default)
+#   - config/settings.local.yaml (gitignored), same layout as this file
+#   - config/.secrets.yaml (gitignored), API keys and logins only
+#   - env vars for a single run, e.g. JOBHUNT_LOGGING__LEVEL=DEBUG
+
+default:
+  logging:
+    level: INFO
+    format: "%(asctime)s %(levelname)s [%(name)s] %(message)s"
+    date_format: "%Y-%m-%d %H:%M:%S"
+    # daily runs happen unattended, so every run also leaves a log file behind
+    file: "@format {this.REPO_ROOT}/logs/job_hunt.log"
+    file_max_megabytes: 5
+    file_backup_count: 5
+
+  database:
+    # sqlite or postgres; only the block named here is used
+    backend: sqlite
+    # print every SQL statement; only useful when debugging a query
+    echo_sql: false
+    sqlite:
+      path: "@format {this.REPO_ROOT}/data/job_hunt.db"
+    postgres:
+      host: localhost
+      port: 5432
+      database_name: job_hunt
+      username: job_hunt
+      # set in config/.secrets.yaml
+      password: null
+      pool_size: 5
+      max_overflow: 5
+
+  cache:
+    # API responses are cached so a rerun on the same day doesn't hit every
+    # source again (and so we stay inside free-tier limits).
+    # disk survives between runs; memory lasts one run (used by the tests)
+    backend: disk
+    key_prefix: v1
+    default_ttl_hours: 12
+    disk:
+      dir: "@format {this.REPO_ROOT}/data/cache"
+      size_limit_megabytes: 512
+    memory:
+      max_entries: 10000
+
+  http:
+    timeout_seconds: 30
+    # retried on connection errors, 429 and 5xx, waiting backoff * 2^attempt
+    max_retries: 3
+    backoff_seconds: 2
+    # be polite to public job feeds: at most one request per host this often
+    min_seconds_between_requests_to_same_host: 1.0
+    user_agent: "job-hunt-agent/0.1 (personal job search)"
+
+# used by the test suite; anything that writes goes to a throwaway folder
+testing:
+  logging:
+    level: DEBUG
+    file: "@format {this.REPO_ROOT}/.pytest_tmp/job_hunt.log"
+  database:
+    sqlite:
+      path: "@format {this.REPO_ROOT}/.pytest_tmp/job_hunt.db"
+  cache:
+    backend: memory
+    disk:
+      dir: "@format {this.REPO_ROOT}/.pytest_tmp/cache"
+  http:
+    max_retries: 2
+    backoff_seconds: 0
+    min_seconds_between_requests_to_same_host: 0
