@@ -1,7 +1,8 @@
 from typing import Any
 
 from job_hunt.common.settings_schema import GoogleJobsSourceSettings, LinkedInSourceSettings
-from job_hunt.job_sources.job_boards.jobspy_source import JobBoardQuery, JobSpySource
+from job_hunt.job_sources.job_boards.job_board_query import JobBoardQuery
+from job_hunt.job_sources.job_boards.jobspy_source import JobSpySource
 from job_hunt.job_sources.job_source import register_job_source
 
 

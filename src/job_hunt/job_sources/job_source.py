@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Iterable
 from typing import ClassVar, Generic, TypeVar
 
-from pydantic import ValidationError
+from pydantic import SecretStr, ValidationError
 
 from job_hunt.common.logger import get_logger
 from job_hunt.common.registry import Registry
@@ -14,6 +14,10 @@ logger = get_logger(__name__)
 RawPostingT = TypeVar("RawPostingT")
 
 job_source_registry: Registry[type["JobSource"]] = Registry("job source")
+
+# Some adverts leave the employer out; the job is kept so it can be checked by
+# hand rather than silently lost.
+UNKNOWN_COMPANY_NAME = "Unknown"
 
 
 class JobSourceError(RuntimeError):
@@ -72,3 +76,13 @@ JobSourceClassT = TypeVar("JobSourceClassT", bound=type[JobSource])
 def register_job_source(source_class: JobSourceClassT) -> JobSourceClassT:
     job_source_registry.register(source_class.name)(source_class)
     return source_class
+
+
+# Keys live in .secrets.yaml and default to null, so a source that needs one
+# says exactly where it goes instead of failing on the first request.
+def require_secret(source_name: str, secret: SecretStr | None, setting_name: str) -> str:
+    if secret is None:
+        raise JobSourceError(
+            f"{source_name}: no {setting_name}; add it under job_sources.{source_name} in .secrets.yaml"
+        )
+    return secret.get_secret_value()

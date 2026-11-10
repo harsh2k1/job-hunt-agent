@@ -5,9 +5,9 @@ import pandas as pd
 import pytest
 
 from job_hunt.common.settings import settings
-from job_hunt.job_sources.job_boards.jobspy_source import UNKNOWN_COMPANY_NAME, clean_cell, format_salary
+from job_hunt.job_sources.job_boards.jobspy_source import clean_cell, format_salary
 from job_hunt.job_sources.job_boards.sites import GoogleJobsSource, IndeedSource, LinkedInSource
-from job_hunt.job_sources.job_source import JobSourceError
+from job_hunt.job_sources.job_source import UNKNOWN_COMPANY_NAME, JobSourceError
 
 # one row as JobSpy returned it for a live Indeed search (Nov 2026), trimmed
 INDEED_ROW = {

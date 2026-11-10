@@ -130,6 +130,32 @@ default:
       searches_kept_in_reserve: 10
       cache_ttl_hours: 20
 
+    # UK job boards with their own free search API; searched with the
+    # job_search role terms and locations. Off until the keys are in
+    # .secrets.yaml (the fetch fails loudly without them).
+    adzuna:
+      # free plan: 250 requests a day; 14 terms x 2 pages fits
+      enabled: false
+      app_id: null
+      app_key: null
+      country_code: gb
+      results_per_page: 50
+      pages_per_search: 2
+      cache_ttl_hours: 20
+    reed:
+      enabled: true
+      api_key: null
+      results_per_page: 100
+      pages_per_search: 2
+      cache_ttl_hours: 20
+
+    # the monthly "Ask HN: Who is hiring?" thread, through HN's public API;
+    # kept when the posting's first line mentions a target location
+    hacker_news_hiring:
+      enabled: true
+      threads_to_read: 1
+      cache_ttl_hours: 12
+
     # companies' own job boards, read for every tracked company on that ATS
     greenhouse:
       enabled: true

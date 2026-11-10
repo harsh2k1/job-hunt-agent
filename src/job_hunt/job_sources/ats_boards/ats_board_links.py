@@ -1,4 +1,4 @@
-from urllib.parse import urlsplit
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from pydantic import BaseModel, ConfigDict
 
@@ -30,3 +30,20 @@ def find_ats_board(url: str) -> AtsBoardLink | None:
         if board_slug:
             return AtsBoardLink(ats_platform=source_class.ats_platform, ats_board_slug=board_slug.lower())
     return None
+
+
+# An advert often links to several places to apply. A link to the company's
+# own ATS board is the most useful one: it's the original, and it lets the
+# fetch run start reading that company's whole board.
+def choose_employer_link(apply_links: list[str]) -> str | None:
+    apply_links = [strip_tracking_params(link) for link in apply_links]
+    board_links = [link for link in apply_links if find_ats_board(link) is not None]
+    return (board_links or apply_links or [None])[0]
+
+
+# Job boards add utm_* to outgoing links, so the same advert would otherwise
+# carry a different URL from every source that links to it.
+def strip_tracking_params(url: str) -> str:
+    parts = urlsplit(url)
+    kept_params = [(name, value) for name, value in parse_qsl(parts.query) if not name.startswith("utm_")]
+    return urlunsplit(parts._replace(query=urlencode(kept_params)))

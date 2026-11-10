@@ -7,7 +7,7 @@ from pydantic import SecretStr
 
 from job_hunt.common.http_client import HttpClient
 from job_hunt.common.settings import settings
-from job_hunt.job_sources.job_boards.serpapi_google_jobs import SerpApiGoogleJobsSource, choose_employer_link
+from job_hunt.job_sources.job_boards.serpapi_google_jobs import SerpApiGoogleJobsSource
 from job_hunt.job_sources.job_source import JobSourceError
 from job_hunt.job_store.models import utc_now
 
@@ -111,16 +111,3 @@ def test_missing_api_key_is_a_clear_error(cache):
 def test_source_fails_when_every_search_fails(cache):
     with pytest.raises(JobSourceError, match="every one"):
         make_source(FakeSerpApi(search_status=401), cache).fetch_jobs()
-
-
-def test_first_link_is_used_when_none_is_an_ats_board():
-    assert (
-        choose_employer_link(["https://uk.indeed.com/1", "https://careers.bbc.co.uk/2"])
-        == "https://uk.indeed.com/1"
-    )
-    assert choose_employer_link([]) is None
-
-
-def test_google_tracking_params_are_dropped_from_apply_links():
-    link = "https://jobs.ashbyhq.com/marshmallow/abc?src=x&utm_source=google_jobs_apply&utm_medium=organic"
-    assert choose_employer_link([link]) == "https://jobs.ashbyhq.com/marshmallow/abc?src=x"

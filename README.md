@@ -8,11 +8,13 @@ Jobs come from:
 
 - big job boards: Indeed and LinkedIn (through JobSpy), Google Jobs (through
   SerpApi, needs a free key), Glassdoor when it isn't blocked
+- UK boards with their own API: Adzuna and Reed (free keys)
+- the monthly Hacker News "Who is hiring?" thread, adverts mentioning the UK
 - companies' own job boards, read directly: Greenhouse, Lever (global and EU),
   Ashby, Workable, SmartRecruiters. The list starts from
   `config/seed_companies.yaml` (121 London employers with a sponsor licence)
   and grows whenever a job-board advert links to a company's board.
-- coming later: UK boards (Adzuna, Reed), graduate trackers, search-engine
+- coming later: graduate trackers, jobs.ac.uk, search-engine
   discovery, student portals that need a login, the UK sponsor register
 
 ## Setup
@@ -22,7 +24,7 @@ Python 3.10+.
 ```bash
 source ~/Documents/venv-3.10/bin/activate
 pip install -e ".[dev]"            # add ,postgres to use Postgres instead of SQLite
-cp config/.secrets.example.yaml config/.secrets.yaml   # only once a source needs a key
+cp config/.secrets.example.yaml config/.secrets.yaml   # keys for SerpApi, Adzuna, Reed
 job-hunt migrate-db
 pytest
 ruff check src tests migrations && ruff format --check src tests migrations
@@ -80,7 +82,8 @@ common/database/         DatabaseFactory + backends, Database (transactions), mi
 common/cache/            CacheFactory + backends, Cache (prefix, TTL, get_or_compute)
 job_store/               tables and the repositories that read and write them
 job_sources/             JobSource base, JobSourceFactory, location matching
-job_sources/job_boards/  Indeed, LinkedIn, Glassdoor, Google Jobs (JobSpy)
+job_sources/job_boards/  Indeed, LinkedIn, Glassdoor (JobSpy); Google Jobs (SerpApi);
+                         Adzuna, Reed (SearchApiSource); HN Who is hiring
 job_sources/ats_boards/  Greenhouse, Lever, Ashby, Workable, SmartRecruiters; board link finder
 job_pipeline/            JobFetchRun: runs sources, saves jobs, adds linked companies
 migrations/              (repo root) Alembic environment and migration scripts
@@ -106,7 +109,8 @@ a model changes without a migration.
 Everything with more than one implementation sits behind a factory and a
 registry, so adding one is a single class plus its settings block:
 
-- **Job source**: subclass `JobSource` (or `JobSpySource` / `AtsBoardSource`),
+- **Job source**: subclass `JobSource` (or `JobSpySource` / `SearchApiSource` /
+  `AtsBoardSource`),
   decorate with `@register_job_source`, add a block under `job_sources` in
   settings.yaml and its model in `settings_schema.py`. A test checks every
   source has settings and every settings block has a source.

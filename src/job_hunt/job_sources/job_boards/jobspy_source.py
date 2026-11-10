@@ -1,5 +1,4 @@
 from collections.abc import Callable, Iterator
-from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from typing import Any, ClassVar
 
@@ -8,7 +7,9 @@ from jobspy import scrape_jobs
 
 from job_hunt.common.logger import get_logger
 from job_hunt.common.settings_schema import JobBoardSourceSettings, JobSearchSettings, Settings
-from job_hunt.job_sources.job_source import JobSource, JobSourceError
+from job_hunt.job_sources.job_boards.job_board_query import JobBoardQuery, build_job_board_queries
+from job_hunt.job_sources.job_source import UNKNOWN_COMPANY_NAME, JobSource, JobSourceError
+from job_hunt.job_sources.salary_text import format_salary_range
 from job_hunt.job_store.models import FetchedJob
 
 logger = get_logger(__name__)
@@ -16,16 +17,6 @@ logger = get_logger(__name__)
 # a JobSpy result row: column name -> cell value
 JobSpyRow = dict[str, Any]
 ScrapeJobsFunction = Callable[..., pd.DataFrame]
-
-# Google Jobs sometimes leaves the employer out; the job is kept so it can be
-# checked by hand rather than silently lost.
-UNKNOWN_COMPANY_NAME = "Unknown"
-
-
-@dataclass(frozen=True)
-class JobBoardQuery:
-    role_term: str
-    location: str
 
 
 class JobSpySource(JobSource[JobSpyRow]):
@@ -49,11 +40,7 @@ class JobSpySource(JobSource[JobSpyRow]):
         return cls(settings.job_search, getattr(settings.job_sources, cls.name))
 
     def _list_raw_postings(self) -> Iterator[JobSpyRow]:
-        queries = [
-            JobBoardQuery(role_term, location)
-            for location in self._search_settings.locations
-            for role_term in self._search_settings.role_terms
-        ]
+        queries = build_job_board_queries(self._search_settings)
         failed_queries = 0
         for query in queries:
             try:
@@ -130,10 +117,6 @@ def parse_posted_date(value: Any) -> datetime | None:
 
 
 def format_salary(row: JobSpyRow) -> str | None:
-    low, high = row.get("min_amount"), row.get("max_amount")
-    if low is None and high is None:
-        return None
-    amounts = [f"{amount:.0f}" for amount in (low, high) if amount is not None]
-    amount_range = amounts[0] if len(set(amounts)) == 1 else "-".join(amounts)
-    parts = [row.get("currency"), amount_range, row.get("interval")]
-    return " ".join(str(part) for part in parts if part)
+    return format_salary_range(
+        row.get("currency"), row.get("min_amount"), row.get("max_amount"), row.get("interval")
+    )

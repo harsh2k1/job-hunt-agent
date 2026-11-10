@@ -2,6 +2,7 @@ import pytest
 
 from job_hunt.job_sources.ats_boards.ats_board_links import (
     AtsBoardLink,
+    choose_employer_link,
     find_ats_board,
     registered_ats_board_sources,
 )
@@ -54,3 +55,16 @@ def test_every_ats_platform_with_a_reader_is_recognised():
         AtsPlatform.WORKABLE,
         AtsPlatform.SMARTRECRUITERS,
     }
+
+
+def test_first_link_is_used_when_none_is_an_ats_board():
+    assert (
+        choose_employer_link(["https://uk.indeed.com/1", "https://careers.bbc.co.uk/2"])
+        == "https://uk.indeed.com/1"
+    )
+    assert choose_employer_link([]) is None
+
+
+def test_google_tracking_params_are_dropped_from_apply_links():
+    link = "https://jobs.ashbyhq.com/marshmallow/abc?src=x&utm_source=google_jobs_apply&utm_medium=organic"
+    assert choose_employer_link([link]) == "https://jobs.ashbyhq.com/marshmallow/abc?src=x"

@@ -119,6 +119,37 @@ class SerpApiGoogleJobsSourceSettings(StrictModel):
     cache_ttl_hours: float = Field(gt=0)
 
 
+class SearchApiSourceSettings(StrictModel):
+    enabled: bool
+    # the API's own page size limit applies (Adzuna 50, Reed 100)
+    results_per_page: int = Field(gt=0, le=100)
+    # a search stops early once a page comes back short
+    pages_per_search: int = Field(ge=1)
+    # free plans count requests, so a rerun on the same day reads the cache
+    cache_ttl_hours: float = Field(gt=0)
+
+
+class AdzunaSourceSettings(SearchApiSourceSettings):
+    # both set in config/.secrets.yaml; free at developer.adzuna.com
+    app_id: SecretStr | None
+    app_key: SecretStr | None
+    # Adzuna's country code in the URL, e.g. gb
+    country_code: str = Field(pattern=r"^[a-z]{2}$")
+
+
+class ReedSourceSettings(SearchApiSourceSettings):
+    # set in config/.secrets.yaml; free at reed.co.uk/developers
+    api_key: SecretStr | None
+
+
+class HackerNewsHiringSourceSettings(StrictModel):
+    enabled: bool
+    # the monthly "Who is hiring?" threads to read, newest first; one is the
+    # current month, two also catches the end of last month's
+    threads_to_read: int = Field(ge=1)
+    cache_ttl_hours: float = Field(gt=0)
+
+
 class AtsSourceSettings(StrictModel):
     enabled: bool
 
@@ -137,6 +168,9 @@ class JobSourcesSettings(StrictModel):
     glassdoor: JobBoardSourceSettings
     google_jobs: GoogleJobsSourceSettings
     serpapi_google_jobs: SerpApiGoogleJobsSourceSettings
+    adzuna: AdzunaSourceSettings
+    reed: ReedSourceSettings
+    hacker_news_hiring: HackerNewsHiringSourceSettings
     greenhouse: AtsSourceSettings
     lever: AtsSourceSettings
     lever_eu: AtsSourceSettings

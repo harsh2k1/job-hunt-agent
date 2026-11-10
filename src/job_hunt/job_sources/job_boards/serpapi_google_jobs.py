@@ -1,13 +1,17 @@
 from collections.abc import Iterator
 from typing import Any
-from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from job_hunt.common.cache import Cache, get_cache
 from job_hunt.common.http_client import HttpClient, HttpRequestError, get_http_client
 from job_hunt.common.logger import get_logger
 from job_hunt.common.settings_schema import SerpApiGoogleJobsSourceSettings, Settings
-from job_hunt.job_sources.ats_boards.ats_board_links import find_ats_board
-from job_hunt.job_sources.job_source import JobSource, JobSourceError, register_job_source
+from job_hunt.job_sources.ats_boards.ats_board_links import choose_employer_link
+from job_hunt.job_sources.job_source import (
+    JobSource,
+    JobSourceError,
+    register_job_source,
+    require_secret,
+)
 from job_hunt.job_sources.relative_dates import parse_relative_age
 from job_hunt.job_store.models import FetchedJob, utc_now
 
@@ -44,7 +48,7 @@ class SerpApiGoogleJobsSource(JobSource[GoogleJobsPosting]):
         return cls(settings.job_sources.serpapi_google_jobs, get_http_client(), get_cache())
 
     def _list_raw_postings(self) -> Iterator[GoogleJobsPosting]:
-        api_key = self._require_api_key()
+        api_key = require_secret(self.name, self._settings.api_key, "api_key")
         self._check_searches_left(api_key)
         failed_terms = 0
         for search_term in self._settings.search_terms:
@@ -58,13 +62,6 @@ class SerpApiGoogleJobsSource(JobSource[GoogleJobsPosting]):
             yield from postings
         if failed_terms == len(self._settings.search_terms):
             raise JobSourceError(f"{self.name}: every one of {failed_terms} searches failed")
-
-    def _require_api_key(self) -> str:
-        if self._settings.api_key is None:
-            raise JobSourceError(
-                f"{self.name}: no api_key; add it under job_sources.{self.name} in .secrets.yaml"
-            )
-        return self._settings.api_key.get_secret_value()
 
     # Stops before the month's searches run out, so the last ones aren't
     # spent on a run that can't finish.
@@ -125,20 +122,3 @@ class SerpApiGoogleJobsSource(JobSource[GoogleJobsPosting]):
             salary_text=extensions.get("salary"),
             is_remote=extensions.get("work_from_home"),
         )
-
-
-# Google lists every place an advert can be applied to. A link to the
-# company's own ATS board is the most useful one: it's the original, and it
-# lets the fetch run start reading that company's whole board.
-def choose_employer_link(apply_links: list[str]) -> str | None:
-    apply_links = [strip_tracking_params(link) for link in apply_links]
-    board_links = [link for link in apply_links if find_ats_board(link) is not None]
-    return (board_links or apply_links or [None])[0]
-
-
-# Google adds utm_* to every apply link, so the same advert would otherwise
-# carry a different URL here than on the board it came from.
-def strip_tracking_params(url: str) -> str:
-    parts = urlsplit(url)
-    kept_params = [(name, value) for name, value in parse_qsl(parts.query) if not name.startswith("utm_")]
-    return urlunsplit(parts._replace(query=urlencode(kept_params)))
