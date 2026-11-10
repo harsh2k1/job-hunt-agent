@@ -1,7 +1,8 @@
 from abc import abstractmethod
 from typing import ClassVar
 
-from job_hunt.job_sources.advert_pages.advert_page_source import AdvertPageLink, AdvertPageSource
+from job_hunt.job_sources.advert_page_reader import AdvertPageLink
+from job_hunt.job_sources.advert_pages.advert_page_source import AdvertPageSource
 from job_hunt.job_sources.sitemaps import read_sitemap
 
 

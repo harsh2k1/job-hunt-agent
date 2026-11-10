@@ -9,6 +9,7 @@ Jobs come from:
 - big job boards: Indeed and LinkedIn (through JobSpy), Google Jobs (through
   SerpApi, needs a free key), Glassdoor when it isn't blocked
 - UK boards with their own API: Adzuna and Reed (free keys)
+- big employers' own careers searches: Microsoft, Amazon, Meta
 - the monthly Hacker News "Who is hiring?" thread, adverts mentioning the UK
 - The Intake (graduate schemes, internships, spring weeks), jobs.ac.uk
   (universities and research institutes) and Student Circus (visa-sponsoring
@@ -21,7 +22,7 @@ Jobs come from:
   Jungle, TargetJobs, Prospects)
 - companies' own job boards, read directly: Greenhouse, Lever (global and EU),
   Ashby, Workable, SmartRecruiters, Teamtailor, Recruitee, Pinpoint, Personio,
-  BambooHR. The list starts from `config/seed_companies.yaml` (121 London
+  BambooHR, Workday. The list starts from `config/seed_companies.yaml` (121 London
   employers with a sponsor licence) and grows whenever an advert from another
   source links to a company's board, and through `discover-companies`, which
   finds boards two ways: web searches limited to ATS sites, and Common
@@ -57,6 +58,8 @@ job-hunt list-sources                     # every source, enabled or not
 job-hunt fetch                            # every enabled source
 job-hunt fetch --source indeed --source ashby   # just these (even if disabled)
 job-hunt job-counts                       # jobs found so far, per source
+job-hunt update-sponsor-register          # load the latest Home Office sponsor register (daily is fine)
+job-hunt check-sponsor "Monzo"            # is this employer a licensed sponsor?
 job-hunt show-settings                    # the settings this run would use
 job-hunt clear-cache                      # drop every cached response
 ```
@@ -104,6 +107,7 @@ job_sources/advert_pages/ AdvertPageSource (JobPosting markup); The Intake, Stud
 job_sources/email_alerts/ Gmail reader and the job links it recognises
 job_sources/portals/     logged-in portals in a saved browser profile; KCL Target Connect
 job_pipeline/            JobFetchRun: runs sources, saves jobs, adds linked companies
+sponsor_register/        finds and reads the Home Office register of licensed sponsors
 company_discovery/       seed list; board search (web search); crawl discovery (Common Crawl)
 company_discovery/common_crawl/  reads Common Crawl's URL index files by byte range
 company_discovery/web_search/  SearchProvider + factory; ddgs (free, no key)

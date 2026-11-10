@@ -10,4 +10,5 @@ from job_hunt.job_sources.ats_boards import (  # noqa: F401
     smartrecruiters,
     teamtailor,
     workable,
+    workday,
 )

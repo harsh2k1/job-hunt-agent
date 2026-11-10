@@ -4,7 +4,8 @@ from urllib.parse import urljoin, urlsplit
 from job_hunt.common.http_client import HttpRequestError
 from job_hunt.common.logger import get_logger
 from job_hunt.common.settings_schema import JobsAcUkSourceSettings
-from job_hunt.job_sources.advert_pages.advert_page_source import AdvertPage, AdvertPageLink, AdvertPageSource
+from job_hunt.job_sources.advert_page_reader import AdvertPage, AdvertPageLink
+from job_hunt.job_sources.advert_pages.advert_page_source import AdvertPageSource
 from job_hunt.job_sources.job_boards.job_board_query import JobBoardQuery, build_job_board_queries
 from job_hunt.job_sources.job_source import JobSourceError, register_job_source
 

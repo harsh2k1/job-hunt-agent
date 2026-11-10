@@ -144,6 +144,11 @@ class ReedSourceSettings(SearchApiSourceSettings):
     api_key: SecretStr | None
 
 
+class AmazonJobsSourceSettings(SearchApiSourceSettings):
+    # amazon.jobs country filter, ISO 3166 alpha-3 (GBR)
+    country_code: str = Field(pattern=r"^[A-Z]{3}$")
+
+
 class HackerNewsHiringSourceSettings(StrictModel):
     enabled: bool
     # the monthly "Who is hiring?" threads to read, newest first; one is the
@@ -204,6 +209,15 @@ class AtsSourceSettings(StrictModel):
     enabled: bool
 
 
+class WorkdaySourceSettings(AtsSourceSettings):
+    # one page per job: cached this long, and at most this many new ones per
+    # board per run (the rest come on later runs)
+    page_cache_ttl_hours: float = Field(gt=0)
+    max_page_downloads_per_board: int = Field(gt=0)
+    # job pages read when deciding whether a newly found board has UK jobs
+    board_check_sample_pages: int = Field(gt=0)
+
+
 class SmartRecruitersSourceSettings(AtsSourceSettings):
     # SmartRecruiters filters by country server-side (ISO code, lower case);
     # big employers have thousands of postings worldwide
@@ -221,9 +235,12 @@ class JobSourcesSettings(StrictModel):
     adzuna: AdzunaSourceSettings
     reed: ReedSourceSettings
     hacker_news_hiring: HackerNewsHiringSourceSettings
+    microsoft_careers: SearchApiSourceSettings
+    amazon_jobs: AmazonJobsSourceSettings
     jointheintake: JoinTheIntakeSourceSettings
     jobs_ac_uk: JobsAcUkSourceSettings
     student_circus: AdvertPageSourceSettings
+    meta_careers: AdvertPageSourceSettings
     email_alerts: EmailAlertsSourceSettings
     kcl_target_connect: KclTargetConnectSourceSettings
     greenhouse: AtsSourceSettings
@@ -237,6 +254,7 @@ class JobSourcesSettings(StrictModel):
     pinpoint: AtsSourceSettings
     personio: AtsSourceSettings
     bamboohr: AtsSourceSettings
+    workday: WorkdaySourceSettings
 
 
 class DdgsSearchSettings(StrictModel):

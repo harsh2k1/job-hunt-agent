@@ -47,3 +47,9 @@ def strip_tracking_params(url: str) -> str:
     parts = urlsplit(url)
     kept_params = [(name, value) for name, value in parse_qsl(parts.query) if not name.startswith("utm_")]
     return urlunsplit(parts._replace(query=urlencode(kept_params)))
+
+
+# For pages that link out: the link, without tracking, if it goes to a
+# company's ATS board (which then gets tracked), otherwise None.
+def board_link_or_none(url: str) -> str | None:
+    return strip_tracking_params(url) if find_ats_board(url) is not None else None

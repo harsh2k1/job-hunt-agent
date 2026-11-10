@@ -1,6 +1,7 @@
 """Each ATS reader against payloads shaped like the real API responses
 (trimmed copies of what the live APIs returned in Nov 2026)."""
 
+import json
 from collections.abc import Callable
 from datetime import datetime, timezone
 from typing import Any
@@ -20,6 +21,7 @@ from job_hunt.job_sources.ats_boards.recruitee import RecruiteeSource
 from job_hunt.job_sources.ats_boards.smartrecruiters import SmartRecruitersSource
 from job_hunt.job_sources.ats_boards.teamtailor import TeamtailorSource
 from job_hunt.job_sources.ats_boards.workable import WorkableSource
+from job_hunt.job_sources.ats_boards.workday import WorkdaySource
 from job_hunt.job_sources.job_source import JobSourceError
 from job_hunt.job_sources.location_matching import TargetLocationMatcher
 from job_hunt.job_store.company_repository import CompanyRepository
@@ -478,3 +480,73 @@ def test_board_check_needs_a_posting_in_a_target_location(database):
     # a fetch would keep this posting (no location to rule it out), but it's
     # not enough to start reading the board every day
     assert not source.board_has_jobs_in_target_locations("vague")
+
+
+WORKDAY_SITEMAP = """<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://jlp.wd3.myworkdayjobs.com/JLPjobs_careers/job/London/Data-Scientist_R-1</loc></url>
+  <url><loc>https://jlp.wd3.myworkdayjobs.com/JLPjobs_careers/job/Dublin/Analyst_R-2</loc></url>
+  <url><loc>https://jlp.wd3.myworkdayjobs.com/JLPjobs_careers</loc></url>
+</urlset>"""
+
+
+def workday_job_page(title: str, job_id: str, locality: str, country: str) -> str:
+    markup = {
+        "@type": "JobPosting",
+        "title": title,
+        "identifier": {"@type": "PropertyValue", "name": title, "value": job_id},
+        "datePosted": "2026-11-10",
+        "validThrough": "2026-11-24",
+        "hiringOrganization": {"name": "John Lewis plc"},
+        "jobLocation": {"address": {"addressLocality": locality, "addressCountry": country}},
+        "description": "<p>Join our data team.</p>",
+    }
+    return f'<script type="application/ld+json">{json.dumps(markup)}</script>'
+
+
+WORKDAY_ROUTES = {
+    ("jlp.wd3.myworkdayjobs.com", "/jlpjobs_careers/siteMap.xml"): WORKDAY_SITEMAP,
+    ("jlp.wd3.myworkdayjobs.com", "/JLPjobs_careers/job/London/Data-Scientist_R-1"): workday_job_page(
+        "Data Scientist", "R-1", "London", "United Kingdom"
+    ),
+    ("jlp.wd3.myworkdayjobs.com", "/JLPjobs_careers/job/Dublin/Analyst_R-2"): workday_job_page(
+        "Analyst", "R-2", "Dublin", "Ireland"
+    ),
+}
+
+
+def make_workday(database, cache, seen_requests=None) -> WorkdaySource:
+    return WorkdaySource(
+        settings.job_sources.workday,
+        TargetLocationMatcher(["london", "uk", "united kingdom"]),
+        make_http_client(WORKDAY_ROUTES, seen_requests),
+        CompanyRepository(database),
+        cache,
+    )
+
+
+def test_workday_site_is_read_from_its_sitemap_and_job_pages(database, cache):
+    track(database, AtsPlatform.WORKDAY, "jlp.wd3/jlpjobs_careers", "John Lewis")
+    [job] = make_workday(database, cache).fetch_jobs()
+
+    assert job.source_job_id == "jlp.wd3/jlpjobs_careers:R-1"
+    assert (job.title, job.company_name, job.location) == (
+        "Data Scientist",
+        "John Lewis",
+        "London, United Kingdom",
+    )
+    assert job.closes_at == datetime(2026, 11, 24, tzinfo=timezone.utc)
+    assert job.description == "Join our data team."
+
+
+def test_workday_job_pages_are_read_once(database, cache):
+    track(database, AtsPlatform.WORKDAY, "jlp.wd3/jlpjobs_careers", "John Lewis")
+    seen: list[httpx.Request] = []
+    make_workday(database, cache, seen).fetch_jobs()
+    make_workday(database, cache, seen).fetch_jobs()
+    job_page_reads = [request for request in seen if "/job/" in request.url.path]
+    assert len(job_page_reads) == 2
+
+
+def test_workday_board_check_reads_a_sample_of_jobs(database, cache):
+    assert make_workday(database, cache).board_has_jobs_in_target_locations("jlp.wd3/jlpjobs_careers")

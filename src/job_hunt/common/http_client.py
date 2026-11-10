@@ -13,6 +13,9 @@ logger = get_logger(__name__)
 
 # worth another try: the server is busy or briefly broken
 RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
+# zstd left out: httpx 0.28 fails on multi-frame zstd responses ("cannot
+# use a decompressobj multiple times", seen from amazon.jobs)
+ACCEPTED_ENCODINGS = "gzip, deflate, br"
 
 
 class HttpRequestError(Exception):
@@ -32,7 +35,7 @@ class HttpClient:
         self._settings = http_settings
         self._client = httpx.Client(
             timeout=http_settings.timeout_seconds,
-            headers={"User-Agent": http_settings.user_agent},
+            headers={"User-Agent": http_settings.user_agent, "Accept-Encoding": ACCEPTED_ENCODINGS},
             follow_redirects=True,
             transport=transport,
         )

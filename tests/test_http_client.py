@@ -39,6 +39,12 @@ def test_gives_up_after_max_retries():
     assert len(sent_requests) == attempts
 
 
+def test_responses_are_never_asked_for_in_zstd():
+    client, sent_requests = make_client_returning([200])
+    client.get_text("https://example.com/")
+    assert "zstd" not in sent_requests[0].headers["Accept-Encoding"]
+
+
 def test_requests_carry_our_user_agent():
     client, sent_requests = make_client_returning([200])
     client.get_text("https://example.com")

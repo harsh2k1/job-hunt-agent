@@ -36,6 +36,12 @@ from job_hunt.job_store.models import AtsPlatform
         ("https://meiragtx.jobs.personio.de/job/2845942?language=en", AtsPlatform.PERSONIO, "meiragtx"),
         ("https://calmlife.jobs.personio.com/", AtsPlatform.PERSONIO, "calmlife"),
         ("https://clearspace.bamboohr.com/careers/list", AtsPlatform.BAMBOOHR, "clearspace"),
+        (
+            "https://jlp.wd3.myworkdayjobs.com/JLPjobs_careers/job/Bracknell/Partner_R-217121",
+            AtsPlatform.WORKDAY,
+            "jlp.wd3/jlpjobs_careers",
+        ),
+        ("https://asda.wd103.myworkdayjobs.com/en-US/AsdaJobs", AtsPlatform.WORKDAY, "asda.wd103/asdajobs"),
     ],
 )
 def test_board_is_found_from_any_link_to_it(url, platform, slug):
@@ -55,6 +61,9 @@ def test_board_is_found_from_any_link_to_it(url, platform, slug):
         "https://app.bamboohr.com/login/",
         "https://clearspace.bamboohr.com/home",
         "https://www.bamboohr.com/careers/list",
+        # Workday's own API paths, not a careers site
+        "https://jlp.wd3.myworkdayjobs.com/wday/cxs/jlp/JLPjobs_careers/jobs",
+        "https://jlp.wd3.myworkdayjobs.com/en-US",
         "not a url",
     ],
 )
@@ -75,6 +84,7 @@ def test_every_ats_platform_with_a_reader_is_recognised():
         AtsPlatform.PINPOINT,
         AtsPlatform.PERSONIO,
         AtsPlatform.BAMBOOHR,
+        AtsPlatform.WORKDAY,
     }
 
 

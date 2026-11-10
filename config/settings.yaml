@@ -180,6 +180,20 @@ default:
       pages_per_search: 2
       cache_ttl_hours: 20
 
+    # Big employers' own careers searches, no key needed
+    microsoft_careers:
+      enabled: true
+      # the API's fixed page size
+      results_per_page: 10
+      pages_per_search: 3
+      cache_ttl_hours: 20
+    amazon_jobs:
+      enabled: true
+      country_code: GBR
+      results_per_page: 100
+      pages_per_search: 2
+      cache_ttl_hours: 20
+
     # the monthly "Ask HN: Who is hiring?" thread, through HN's public API;
     # kept when the posting's first line mentions a target location
     hacker_news_hiring:
@@ -213,6 +227,12 @@ default:
       page_cache_ttl_hours: 168
       max_page_downloads_per_run: 500
       search_cache_ttl_hours: 20
+    meta_careers:
+      # Meta's jobs sitemap, ~1,350 jobs worldwide; its dates are per job,
+      # so after the first runs only changed jobs are downloaded
+      enabled: true
+      page_cache_ttl_hours: 720
+      max_page_downloads_per_run: 1500
     student_circus:
       # visa-sponsoring employers. Public advert pages, no login (only the
       # description is behind one). About 6,400 adverts: the first runs take
@@ -289,6 +309,13 @@ default:
       enabled: true
     bamboohr:
       enabled: true
+    # Workday careers sites (big UK employers: retail, banks, ...): the
+    # sitemap, then the JobPosting markup on each job page
+    workday:
+      enabled: true
+      page_cache_ttl_hours: 168
+      max_page_downloads_per_board: 300
+      board_check_sample_pages: 15
 
   companies:
     # London AI / data / tech employers that hold a Skilled Worker sponsor

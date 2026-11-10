@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from enum import Enum
 
 from pydantic import field_validator
@@ -119,3 +119,28 @@ class TrackedCompany(DiscoveredCompany, table=True):
     # its board isn't rediscovered and re-added every day
     is_active: bool = True
     added_at: datetime = Field(default_factory=utc_now)
+
+
+class LicensedSponsor(SQLModel, table=True):
+    """One entry of the Home Office register of licensed sponsors (Worker and
+    Temporary Worker routes): an employer allowed to sponsor visas. An
+    organisation appears once per route it's licensed for. The whole table
+    is replaced whenever a newer register is published."""
+
+    __tablename__ = "licensed_sponsors"
+
+    id: int | None = Field(default=None, primary_key=True)
+    organisation_name: str
+    # the name after "T/A" in the register, when it gives one
+    trading_name: str | None = None
+    # normalise_company_name of each, for matching job adverts' employer names
+    normalised_name: str = Field(index=True)
+    normalised_trading_name: str | None = Field(default=None, index=True)
+    town_city: str | None = None
+    county: str | None = None
+    # e.g. "Worker (A rating)"
+    type_and_rating: str
+    # e.g. "Skilled Worker", "Global Business Mobility: Senior or Specialist Worker"
+    route: str
+    # the date of the register file this came from
+    register_date: date
