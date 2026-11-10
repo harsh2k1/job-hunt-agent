@@ -4,7 +4,9 @@ from job_hunt.common.settings_schema import Settings
 # imported so every source registers itself before the factory is used
 import job_hunt.job_sources.advert_pages  # noqa: F401  # isort: skip
 import job_hunt.job_sources.ats_boards  # noqa: F401  # isort: skip
+import job_hunt.job_sources.email_alerts  # noqa: F401  # isort: skip
 import job_hunt.job_sources.job_boards  # noqa: F401  # isort: skip
+import job_hunt.job_sources.portals  # noqa: F401  # isort: skip
 from job_hunt.job_sources.job_source import JobSource, job_source_registry
 
 

@@ -2,7 +2,7 @@ import pytest
 from pydantic import ValidationError
 
 from job_hunt.common.settings import dynaconf_settings, settings, validate_settings
-from job_hunt.common.settings_schema import HttpSettings
+from job_hunt.common.settings_schema import HttpSettings, Settings
 
 
 def test_settings_load_the_testing_environment():
@@ -26,3 +26,12 @@ def test_misspelled_key_is_rejected():
     values = settings.http.model_dump() | {"timout_seconds": 5}
     with pytest.raises(ValidationError):
         HttpSettings.model_validate(values)
+
+
+def test_settings_errors_never_show_the_values():
+    raw = settings.model_dump(mode="json")
+    raw["job_sources"]["misplaced"] = {"password": "do-not-print-me"}
+    with pytest.raises(ValidationError) as error:
+        Settings.model_validate(raw)
+    assert "misplaced" in str(error.value)
+    assert "do-not-print-me" not in str(error.value)

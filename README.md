@@ -10,9 +10,15 @@ Jobs come from:
   SerpApi, needs a free key), Glassdoor when it isn't blocked
 - UK boards with their own API: Adzuna and Reed (free keys)
 - the monthly Hacker News "Who is hiring?" thread, adverts mentioning the UK
-- The Intake (graduate schemes, internships, spring weeks) and jobs.ac.uk
-  (universities and research institutes), read from each advert's
-  schema.org JobPosting markup, closing dates included
+- The Intake (graduate schemes, internships, spring weeks), jobs.ac.uk
+  (universities and research institutes) and Student Circus (visa-sponsoring
+  employers), read from each advert's schema.org JobPosting markup, closing
+  dates included
+- King's CareerConnect (KCL Target Connect), read in a browser with a saved
+  sign-in (a person signs in once with passkey / 2FA)
+- job alert emails in Gmail (read only): LinkedIn, Indeed, and the portals
+  that can't be read directly (Gradcracker, Handshake, Welcome to the
+  Jungle, TargetJobs, Prospects)
 - companies' own job boards, read directly: Greenhouse, Lever (global and EU),
   Ashby, Workable, SmartRecruiters, Teamtailor, Recruitee, Pinpoint, Personio,
   BambooHR. The list starts from `config/seed_companies.yaml` (121 London
@@ -31,7 +37,7 @@ Python 3.10+.
 ```bash
 source ~/Documents/venv-3.10/bin/activate
 pip install -e ".[dev]"            # add ,postgres to use Postgres instead of SQLite
-cp config/.secrets.example.yaml config/.secrets.yaml   # keys for SerpApi, Adzuna, Reed
+cp config/.secrets.example.yaml config/.secrets.yaml   # API keys and the KCL login
 job-hunt migrate-db
 pytest
 ruff check src tests migrations && ruff format --check src tests migrations
@@ -94,7 +100,9 @@ job_sources/             JobSource base, JobSourceFactory, location matching
 job_sources/job_boards/  Indeed, LinkedIn, Glassdoor (JobSpy); Google Jobs (SerpApi);
                          Adzuna, Reed (SearchApiSource); HN Who is hiring
 job_sources/ats_boards/  Greenhouse, Lever, Ashby, Workable, SmartRecruiters; board link finder
-job_sources/advert_pages/ AdvertPageSource (JobPosting markup); The Intake, jobs.ac.uk
+job_sources/advert_pages/ AdvertPageSource (JobPosting markup); The Intake, Student Circus, jobs.ac.uk
+job_sources/email_alerts/ Gmail reader and the job links it recognises
+job_sources/portals/     logged-in portals in a saved browser profile; KCL Target Connect
 job_pipeline/            JobFetchRun: runs sources, saves jobs, adds linked companies
 company_discovery/       seed list; board search (web search); crawl discovery (Common Crawl)
 company_discovery/common_crawl/  reads Common Crawl's URL index files by byte range

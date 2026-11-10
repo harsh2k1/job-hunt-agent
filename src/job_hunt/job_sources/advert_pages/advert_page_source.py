@@ -8,6 +8,7 @@ from typing import Any
 from urllib.parse import urlsplit
 
 from job_hunt.common.cache import Cache, get_cache
+from job_hunt.common.cache.backends import CACHE_MISS
 from job_hunt.common.http_client import HttpClient, HttpRequestError, get_http_client
 from job_hunt.common.logger import get_logger
 from job_hunt.common.settings_schema import AdvertPageSourceSettings, JobSearchSettings, Settings
@@ -77,39 +78,47 @@ class AdvertPageSource(JobSource[AdvertPage]):
             settings.job_search, getattr(settings.job_sources, cls.name), get_http_client(), get_cache()
         )
 
+    # Pages already in the cache cost nothing; new ones are downloaded up to
+    # max_page_downloads_per_run, and the rest wait for the next run, so a
+    # first run against a big site can't hold up the daily fetch for hours.
     def _list_raw_postings(self) -> Iterator[AdvertPage]:
         links = self._list_advert_links()
         if not links:
             raise JobSourceError(f"{self.name}: found no advert pages to read")
-        failed_pages = pages_without_markup = 0
+        pages_read = downloads = failed_pages = deferred_pages = pages_without_markup = 0
         for link in links:
-            try:
-                page = self._read_advert_page(link)
-            except HttpRequestError as error:
-                failed_pages += 1
-                logger.warning("%s: couldn't read %s: %s", self.name, link.url, error)
-                continue
-            if page is None:
+            cache_key = f"{self.name}:advert:{link.url}:{link.version}"
+            page_fields = self._cache.get(cache_key, default=CACHE_MISS)
+            if page_fields is CACHE_MISS:
+                if downloads >= self._source_settings.max_page_downloads_per_run:
+                    deferred_pages += 1
+                    continue
+                downloads += 1
+                try:
+                    page_fields = self._download_advert_page(link.url)
+                except HttpRequestError as error:
+                    failed_pages += 1
+                    logger.warning("%s: couldn't read %s: %s", self.name, link.url, error)
+                    continue
+                self._cache.set(cache_key, page_fields, ttl_hours=self._source_settings.page_cache_ttl_hours)
+            pages_read += 1
+            if page_fields is None:
                 pages_without_markup += 1
                 continue
-            yield page
+            yield AdvertPage(url=link.url, **page_fields)
         logger.info(
-            "%s: %d advert pages, %d failed, %d without JobPosting markup",
+            "%s: %d advert pages: %d read (%d downloaded), %d failed, %d left for the next run, "
+            "%d without JobPosting markup",
             self.name,
             len(links),
+            pages_read,
+            downloads,
             failed_pages,
+            deferred_pages,
             pages_without_markup,
         )
-        if failed_pages == len(links):
+        if failed_pages and not pages_read:
             raise JobSourceError(f"{self.name}: every one of {failed_pages} advert pages failed")
-
-    def _read_advert_page(self, link: AdvertPageLink) -> AdvertPage | None:
-        page_fields = self._cache.get_or_compute(
-            f"{self.name}:advert:{link.url}:{link.version}",
-            lambda: self._download_advert_page(link.url),
-            ttl_hours=self._source_settings.page_cache_ttl_hours,
-        )
-        return None if page_fields is None else AdvertPage(url=link.url, **page_fields)
 
     # Only what's needed is cached, not the whole page: adverts are mostly
     # layout, and some sites have thousands of them.

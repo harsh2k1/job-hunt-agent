@@ -190,11 +190,12 @@ default:
     # Sites with one page per advert carrying schema.org JobPosting markup
     # (the data Google for Jobs reads). Only pages robots.txt allows.
     jointheintake:
-      # graduate schemes and internships with closing dates. The first run
-      # reads about 1,000 adverts (roughly 20 minutes at one request a
-      # second); after that only the ones its sitemap says have changed.
+      # graduate schemes and internships with closing dates. About 1,000
+      # adverts (roughly 20 minutes at one request a second the first time);
+      # after that only the ones its sitemap says have changed.
       enabled: true
       page_cache_ttl_hours: 720
+      max_page_downloads_per_run: 1500
       # law-only sections (training contracts, vacation schemes, paralegal)
       # are left out
       sections:
@@ -210,7 +211,58 @@ default:
       enabled: true
       pages_per_search: 2
       page_cache_ttl_hours: 168
+      max_page_downloads_per_run: 500
       search_cache_ttl_hours: 20
+    student_circus:
+      # visa-sponsoring employers. Public advert pages, no login (only the
+      # description is behind one). About 6,400 adverts: the first runs take
+      # 1,500 a run (about 25 minutes), after that only new ones. Its
+      # sitemap dates are all the same, so adverts are kept for 30 days.
+      enabled: true
+      page_cache_ttl_hours: 720
+      max_page_downloads_per_run: 1500
+
+    # Job alert emails in Gmail (read only): the saved searches on LinkedIn
+    # and Indeed, and the portals that can't be read directly (Gradcracker,
+    # Handshake, Welcome to the Jungle, TargetJobs, Prospects, ...). Needs
+    # the OAuth client file; the first run asks for consent in the browser
+    # once.
+    email_alerts:
+      enabled: true
+      gmail_client_secret_path: "@format {this.REPO_ROOT}/config/gmail_client_secret.json"
+      gmail_token_path: "@format {this.REPO_ROOT}/data/gmail_token.json"
+      # The OAuth app stays in Testing (publishing needs a home page and a
+      # privacy policy), so Google expires the token every 7 days and the
+      # consent page opens again; a run waits this long for the approval.
+      gmail_consent_timeout_seconds: 300
+      # Job-alert senders only, by exact address where known, so personal
+      # mail (LinkedIn messages and invitations, recruiter messages on
+      # Indeed) is never read. Runs overlap; jobs are matched by site and
+      # id, so an advert seen twice is one job.
+      # Indeed senders (alert@indeed.com, donotreply@match.indeed.com) are
+      # left out until the Indeed profile is set up for full-time roles;
+      # their parser stays ready.
+      gmail_query: >-
+        newer_than:7d from:(jobalerts-noreply@linkedin.com
+        OR jobs-noreply@linkedin.com
+        OR handshake@notifications.joinhandshake.com OR gradcracker.com
+        OR welcometothejungle.com OR targetjobs.co.uk OR prospects.ac.uk
+        OR brightnetwork.co.uk OR workinstartups.com)
+      max_messages_per_run: 300
+      message_cache_ttl_hours: 720
+
+    # King's CareerConnect (Target Connect), jobs posted to King's students.
+    # Read in a real browser with a saved profile; the first sign-in is done
+    # by a person (passkey / 2FA), later runs reuse it. Login in
+    # .secrets.yaml under portal_logins.kcl (only used to fill the username,
+    # and the password if King's asks for one).
+    kcl_target_connect:
+      enabled: true
+      browser_profile_dir: "@format {this.REPO_ROOT}/data/browser_profiles/kcl_target_connect"
+      silent_sign_in_seconds: 30
+      allow_visible_sign_in: true
+      sign_in_wait_seconds: 600
+      max_result_pages: 10
 
     # companies' own job boards, read for every tracked company on that ATS
     greenhouse:
@@ -282,6 +334,11 @@ default:
       board_recheck_after_hours: 720
       board_list_cache_ttl_hours: 2160
 
+  # Accounts for portals that need a login; the details go in
+  # config/.secrets.yaml, never here.
+  portal_logins:
+    kcl: null
+
 # used by the test suite; anything that writes goes to a throwaway folder
 testing:
   logging:
@@ -300,3 +357,7 @@ testing:
     min_seconds_between_requests_to_same_host: 0
   company_discovery:
     seconds_between_searches: 0
+  job_sources:
+    kcl_target_connect:
+      # tests never open a browser window
+      allow_visible_sign_in: false

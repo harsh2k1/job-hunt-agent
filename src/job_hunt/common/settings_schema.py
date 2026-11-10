@@ -8,7 +8,9 @@ from pydantic import BaseModel, ConfigDict, Field, SecretStr
 # defaults live. extra="forbid" so a misspelled key fails at startup instead of
 # being silently ignored.
 class StrictModel(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
+    # hide_input_in_errors: a settings error names the key, never its value,
+    # since the values include passwords and API keys from .secrets.yaml
+    model_config = ConfigDict(extra="forbid", frozen=True, hide_input_in_errors=True)
 
 
 class LoggingSettings(StrictModel):
@@ -155,6 +157,8 @@ class AdvertPageSourceSettings(StrictModel):
     # How long a downloaded advert is trusted. Where the site says when a page
     # changed (a sitemap), a change is picked up straight away regardless.
     page_cache_ttl_hours: float = Field(gt=0)
+    # new pages downloaded per run; the rest wait for the next run
+    max_page_downloads_per_run: int = Field(gt=0)
 
 
 class JoinTheIntakeSourceSettings(AdvertPageSourceSettings):
@@ -166,6 +170,34 @@ class JobsAcUkSourceSettings(AdvertPageSourceSettings):
     # 25 adverts a page
     pages_per_search: int = Field(ge=1)
     search_cache_ttl_hours: float = Field(gt=0)
+
+
+class EmailAlertsSourceSettings(StrictModel):
+    enabled: bool
+    # the OAuth client downloaded from Google Cloud (gitignored)
+    gmail_client_secret_path: Path
+    # written after the one-time consent; refreshed on its own after that
+    gmail_token_path: Path
+    # how long a run waits for the consent page to be approved
+    gmail_consent_timeout_seconds: int = Field(gt=0)
+    # Gmail search syntax: which emails count as job alerts
+    gmail_query: str
+    max_messages_per_run: int = Field(gt=0)
+    message_cache_ttl_hours: float = Field(gt=0)
+
+
+class KclTargetConnectSourceSettings(StrictModel):
+    enabled: bool
+    # the saved browser profile that keeps the King's session
+    browser_profile_dir: Path
+    # how long King's single sign-on gets to sign in on its own
+    silent_sign_in_seconds: float = Field(gt=0)
+    # When the session has ended: open a visible window for a person to sign
+    # in (passkey / 2FA), and wait this long. Off for runs nobody watches.
+    allow_visible_sign_in: bool
+    sign_in_wait_seconds: float = Field(gt=0)
+    # 100 jobs a page
+    max_result_pages: int = Field(ge=1)
 
 
 class AtsSourceSettings(StrictModel):
@@ -191,6 +223,9 @@ class JobSourcesSettings(StrictModel):
     hacker_news_hiring: HackerNewsHiringSourceSettings
     jointheintake: JoinTheIntakeSourceSettings
     jobs_ac_uk: JobsAcUkSourceSettings
+    student_circus: AdvertPageSourceSettings
+    email_alerts: EmailAlertsSourceSettings
+    kcl_target_connect: KclTargetConnectSourceSettings
     greenhouse: AtsSourceSettings
     lever: AtsSourceSettings
     lever_eu: AtsSourceSettings
@@ -247,6 +282,17 @@ class CompanySeedSettings(StrictModel):
     seed_list_path: Path
 
 
+class PortalLogin(StrictModel):
+    username: str = Field(min_length=1)
+    password: SecretStr
+
+
+class PortalLoginsSettings(StrictModel):
+    # King's single sign-on (Microsoft), used by Target Connect; set in
+    # config/.secrets.yaml, null until then
+    kcl: PortalLogin | None
+
+
 class Settings(StrictModel):
     env: str
     logging: LoggingSettings
@@ -257,3 +303,4 @@ class Settings(StrictModel):
     job_sources: JobSourcesSettings
     companies: CompanySeedSettings
     company_discovery: CompanyDiscoverySettings
+    portal_logins: PortalLoginsSettings

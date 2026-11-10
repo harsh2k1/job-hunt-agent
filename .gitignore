@@ -225,6 +225,8 @@ notes/
 # Secrets (dynaconf)
 .secrets.yaml
 config/.secrets.yaml
+# Gmail OAuth client for reading job alerts
+config/gmail_client_secret.json
 
 # Local config overrides
 config/settings.local.yaml

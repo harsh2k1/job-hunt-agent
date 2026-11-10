@@ -9,6 +9,7 @@ from job_hunt.common.http_client import HttpClient
 from job_hunt.common.settings import settings
 from job_hunt.job_sources.advert_pages.jobs_ac_uk import JobsAcUkSource
 from job_hunt.job_sources.advert_pages.jointheintake import JoinTheIntakeSource
+from job_hunt.job_sources.advert_pages.student_circus import StudentCircusSource
 from job_hunt.job_sources.sitemaps import read_sitemap
 
 INTAKE_SITEMAP = """<?xml version="1.0" encoding="UTF-8"?>
@@ -196,3 +197,85 @@ def test_jobs_ac_uk_search_pages_lead_to_advert_pages(cache):
     assert job.source_job_id == "DTO332"
     assert job.closes_at.isoformat() == "2026-11-22T00:00:00+00:00"
     assert job.url == "https://www.jobs.ac.uk/job/DTO332/data-scientist-arc"
+
+
+def test_downloads_stop_at_the_cap_and_the_next_run_carries_on(cache):
+    capped = settings.job_sources.jointheintake.model_copy(update={"max_page_downloads_per_run": 2})
+
+    def run() -> FakeSite:
+        fake_site = intake_site()
+        JoinTheIntakeSource(
+            settings.job_search, capped, HttpClient(settings.http, httpx.MockTransport(fake_site)), cache
+        ).fetch_jobs()
+        return fake_site
+
+    first, second = run(), run()
+    assert len([path for path in first.paths if path != "/sitemap.xml"]) == 2
+    # the two from the first run come from the cache; only the third is downloaded
+    assert [path for path in second.paths if path != "/sitemap.xml"] == [
+        "/internships/google-financial-analyst-intern-2027-dublin-8lfkbo"
+    ]
+
+
+STUDENT_CIRCUS_SITEMAP = """<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://studentcircus.com/jobs</loc><lastmod>2026-11-01</lastmod></url>
+  <url><loc>https://studentcircus.com/jobs/others</loc><lastmod>2026-11-01</lastmod></url>
+  <url><loc>https://studentcircus.com/jobs/graduate-data-scientist-20311</loc><lastmod>2026-11-01</lastmod></url>
+  <url><loc>https://studentcircus.com/blog/visa-guide</loc><lastmod>2026-11-01</lastmod></url>
+</urlset>"""
+# trimmed from a live advert page (Nov 2026): no description without a login
+STUDENT_CIRCUS_ADVERT = (
+    '<script type="application/ld+json">'
+    + json.dumps(
+        {
+            "@type": "JobPosting",
+            "title": "GRADUATE DATA SCIENTIST",
+            "description": "",
+            "datePosted": "2026-10-19",
+            "validThrough": "2027-01-19",
+            "employmentType": "FULL_TIME",
+            "hiringOrganization": {"@type": "Organization", "name": "Wise"},
+            "jobLocation": {"address": {"addressRegion": "London, UK", "addressCountry": "United Kingdom"}},
+        }
+    )
+    + "</script>"
+)
+
+
+def make_student_circus(sitemap: str, cache) -> tuple[StudentCircusSource, FakeSite]:
+    fake_site = FakeSite(
+        {
+            "/sitemap/job-sitemap.xml": sitemap,
+            "/jobs/others": "<html>category page</html>",
+            "/jobs/graduate-data-scientist-20311": STUDENT_CIRCUS_ADVERT,
+        }
+    )
+    source = StudentCircusSource(
+        settings.job_search,
+        settings.job_sources.student_circus,
+        HttpClient(settings.http, httpx.MockTransport(fake_site)),
+        cache,
+    )
+    return source, fake_site
+
+
+def test_student_circus_adverts_are_read_without_a_login(cache):
+    source, fake_site = make_student_circus(STUDENT_CIRCUS_SITEMAP, cache)
+    [job] = source.fetch_jobs()
+
+    # the listing page and the blog post aren't adverts; the category page is
+    # read but has no markup
+    assert sorted(path for path in fake_site.paths if path.startswith("/jobs")) == [
+        "/jobs/graduate-data-scientist-20311",
+        "/jobs/others",
+    ]
+    assert (job.company_name, job.location, job.description) == ("Wise", "London, UK, United Kingdom", None)
+    assert job.closes_at.isoformat() == "2027-01-19T00:00:00+00:00"
+
+
+def test_student_circus_sitemap_date_changes_dont_cause_downloads(cache):
+    make_student_circus(STUDENT_CIRCUS_SITEMAP, cache)[0].fetch_jobs()
+    source, fake_site = make_student_circus(STUDENT_CIRCUS_SITEMAP.replace("2026-11-01", "2026-12-01"), cache)
+    source.fetch_jobs()
+    assert fake_site.paths == ["/sitemap/job-sitemap.xml"]
