@@ -72,10 +72,13 @@ class FetchedJob(SQLModel):
     salary_text: str | None = None
     # None when the source doesn't say
     is_remote: bool | None = None
+    # the application deadline, when the source gives one; graduate schemes
+    # and internships close early, so this decides what to apply to first
+    closes_at: datetime | None = None
 
-    @field_validator("posted_at")
+    @field_validator("posted_at", "closes_at")
     @classmethod
-    def store_posted_at_as_utc(cls, value: datetime | None) -> datetime | None:
+    def store_times_as_utc(cls, value: datetime | None) -> datetime | None:
         return None if value is None else to_utc(value)
 
 

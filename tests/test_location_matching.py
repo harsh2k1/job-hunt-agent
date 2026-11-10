@@ -1,5 +1,6 @@
 import pytest
 
+from job_hunt.common.settings import settings
 from job_hunt.job_sources.location_matching import TargetLocationMatcher, join_locations
 
 matcher = TargetLocationMatcher(["london", "united kingdom", "uk", "england"])
@@ -36,3 +37,20 @@ def test_matcher_needs_at_least_one_keyword():
 def test_joined_locations_drop_blanks_and_repeats_but_keep_order():
     assert join_locations(["London", None, " London ", "Remote - UK", ""]) == "London; Remote - UK"
     assert join_locations([None, ""]) is None
+
+
+@pytest.mark.parametrize(
+    "location, is_target",
+    [
+        ("Edinburgh", True),
+        ("Manchester, Greater Manchester", True),
+        ("Remote (UK)", True),
+        ("Cardiff, Wales", True),
+        ("New York, NY", False),
+        ("Reading the room is part of the job", False),
+        ("Kyiv, Ukraine", False),
+    ],
+)
+def test_committed_keywords_cover_the_uk_and_avoid_lookalikes(location, is_target):
+    matcher = TargetLocationMatcher(settings.job_search.target_location_keywords)
+    assert matcher.matches(location) is is_target

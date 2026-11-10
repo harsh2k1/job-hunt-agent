@@ -58,6 +58,7 @@ class ReedSource(SearchApiSource):
             # a snippet; the full advert needs one more request per job
             description=html_to_text(raw_posting.get("jobDescription")),
             posted_at=parse_reed_date(raw_posting.get("date")),
+            closes_at=parse_reed_date(raw_posting.get("expirationDate")),
             salary_text=format_salary_range(
                 raw_posting.get("currency"),
                 raw_posting.get("minimumSalary"),

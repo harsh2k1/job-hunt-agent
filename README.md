@@ -1,8 +1,8 @@
 # job-hunt-agent
 
 Finds data science and AI openings for September 2027 starts (graduate schemes,
-internships, full-time roles), mostly in London and at employers that can
-sponsor a visa, and keeps track of them.
+internships, full-time roles) in London and across the UK, at employers that
+can sponsor a visa, and keeps track of them.
 
 Jobs come from:
 
@@ -10,11 +10,14 @@ Jobs come from:
   SerpApi, needs a free key), Glassdoor when it isn't blocked
 - UK boards with their own API: Adzuna and Reed (free keys)
 - the monthly Hacker News "Who is hiring?" thread, adverts mentioning the UK
+- The Intake (graduate schemes, internships, spring weeks) and jobs.ac.uk
+  (universities and research institutes), read from each advert's
+  schema.org JobPosting markup, closing dates included
 - companies' own job boards, read directly: Greenhouse, Lever (global and EU),
   Ashby, Workable, SmartRecruiters. The list starts from
   `config/seed_companies.yaml` (121 London employers with a sponsor licence)
   and grows whenever a job-board advert links to a company's board.
-- coming later: graduate trackers, jobs.ac.uk, search-engine
+- coming later: search-engine
   discovery, student portals that need a login, the UK sponsor register
 
 ## Setup
@@ -85,6 +88,7 @@ job_sources/             JobSource base, JobSourceFactory, location matching
 job_sources/job_boards/  Indeed, LinkedIn, Glassdoor (JobSpy); Google Jobs (SerpApi);
                          Adzuna, Reed (SearchApiSource); HN Who is hiring
 job_sources/ats_boards/  Greenhouse, Lever, Ashby, Workable, SmartRecruiters; board link finder
+job_sources/advert_pages/ AdvertPageSource (JobPosting markup); The Intake, jobs.ac.uk
 job_pipeline/            JobFetchRun: runs sources, saves jobs, adds linked companies
 migrations/              (repo root) Alembic environment and migration scripts
 ```
@@ -110,7 +114,7 @@ Everything with more than one implementation sits behind a factory and a
 registry, so adding one is a single class plus its settings block:
 
 - **Job source**: subclass `JobSource` (or `JobSpySource` / `SearchApiSource` /
-  `AtsBoardSource`),
+  `AdvertPageSource` / `AtsBoardSource`),
   decorate with `@register_job_source`, add a block under `job_sources` in
   settings.yaml and its model in `settings_schema.py`. A test checks every
   source has settings and every settings block has a source.

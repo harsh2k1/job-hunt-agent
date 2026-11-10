@@ -150,6 +150,24 @@ class HackerNewsHiringSourceSettings(StrictModel):
     cache_ttl_hours: float = Field(gt=0)
 
 
+class AdvertPageSourceSettings(StrictModel):
+    enabled: bool
+    # How long a downloaded advert is trusted. Where the site says when a page
+    # changed (a sitemap), a change is picked up straight away regardless.
+    page_cache_ttl_hours: float = Field(gt=0)
+
+
+class JoinTheIntakeSourceSettings(AdvertPageSourceSettings):
+    # top-level sections whose adverts are read, e.g. graduate-schemes
+    sections: list[str] = Field(min_length=1)
+
+
+class JobsAcUkSourceSettings(AdvertPageSourceSettings):
+    # 25 adverts a page
+    pages_per_search: int = Field(ge=1)
+    search_cache_ttl_hours: float = Field(gt=0)
+
+
 class AtsSourceSettings(StrictModel):
     enabled: bool
 
@@ -171,6 +189,8 @@ class JobSourcesSettings(StrictModel):
     adzuna: AdzunaSourceSettings
     reed: ReedSourceSettings
     hacker_news_hiring: HackerNewsHiringSourceSettings
+    jointheintake: JoinTheIntakeSourceSettings
+    jobs_ac_uk: JobsAcUkSourceSettings
     greenhouse: AtsSourceSettings
     lever: AtsSourceSettings
     lever_eu: AtsSourceSettings

@@ -73,16 +73,46 @@ default:
       - research scientist machine learning
       - NLP engineer
       - LLM engineer
+    # London first, then the whole UK: a country-wide search returns its top
+    # results only, so London on its own still surfaces London roles the UK
+    # search would push out. Spelled "United Kingdom": Reed reads "UK" as
+    # somewhere near Manchester.
     locations:
       - London
-    # "uk" matches "Remote - UK" but not "Ukraine"; postings with no location
-    # at all are kept so they can be checked by hand
+      - United Kingdom
+    # Used where a source returns every office worldwide (company boards, HN,
+    # The Intake, jobs.ac.uk). Whole words, any case: "uk" matches
+    # "Remote - UK" but not "Ukraine". Cities are listed because adverts often
+    # give only the city. Left out on purpose: names that are also everyday
+    # words or US places in adverts (Reading, Bath, York). Postings with no
+    # location at all are kept so they can be checked by hand.
     target_location_keywords:
       - london
       - united kingdom
       - uk
       - england
+      - scotland
+      - wales
+      - northern ireland
       - great britain
+      - britain
+      - manchester
+      - birmingham
+      - leeds
+      - bristol
+      - cambridge
+      - oxford
+      - edinburgh
+      - glasgow
+      - aberdeen
+      - dundee
+      - cardiff
+      - belfast
+      - newcastle upon tyne
+      - sheffield
+      - nottingham
+      - liverpool
+      - southampton
     # daily runs overlap by design; already-seen jobs are only updated
     max_posting_age_hours: 168
     indeed_country: UK
@@ -155,6 +185,31 @@ default:
       enabled: true
       threads_to_read: 1
       cache_ttl_hours: 12
+
+    # Sites with one page per advert carrying schema.org JobPosting markup
+    # (the data Google for Jobs reads). Only pages robots.txt allows.
+    jointheintake:
+      # graduate schemes and internships with closing dates. The first run
+      # reads about 1,000 adverts (roughly 20 minutes at one request a
+      # second); after that only the ones its sitemap says have changed.
+      enabled: true
+      page_cache_ttl_hours: 720
+      # law-only sections (training contracts, vacation schemes, paralegal)
+      # are left out
+      sections:
+        - graduate-schemes
+        - internships
+        - placements
+        - spring-weeks
+        - insight-days
+        - first-year-schemes
+    jobs_ac_uk:
+      # universities and research institutes; searched with the job_search
+      # role terms and locations
+      enabled: true
+      pages_per_search: 2
+      page_cache_ttl_hours: 168
+      search_cache_ttl_hours: 20
 
     # companies' own job boards, read for every tracked company on that ATS
     greenhouse:

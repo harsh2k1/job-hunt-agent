@@ -1,7 +1,6 @@
 import html
 import re
 from collections.abc import Iterator
-from datetime import datetime
 from typing import Any
 
 from job_hunt.common.cache import Cache, get_cache
@@ -12,6 +11,7 @@ from job_hunt.job_sources.ats_boards.ats_board_links import choose_employer_link
 from job_hunt.job_sources.html_to_text import html_to_text
 from job_hunt.job_sources.job_source import JobSource, JobSourceError, register_job_source
 from job_hunt.job_sources.location_matching import TargetLocationMatcher
+from job_hunt.job_sources.timestamps import parse_iso_timestamp
 from job_hunt.job_store.models import FetchedJob
 
 logger = get_logger(__name__)
@@ -109,7 +109,7 @@ class HackerNewsHiringSource(JobSource[HackerNewsComment]):
             url=POSTING_PAGE_URL.format(item_id=raw_posting["id"]),
             employer_url=choose_employer_link(links),
             description=description,
-            posted_at=datetime.fromisoformat(raw_posting["created_at"].replace("Z", "+00:00")),
+            posted_at=parse_iso_timestamp(raw_posting.get("created_at")),
             is_remote=True if any("remote" in part.lower() for part in details) else None,
         )
 

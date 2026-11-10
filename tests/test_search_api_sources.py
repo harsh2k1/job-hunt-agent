@@ -40,6 +40,7 @@ def reed_posting(job_id: int, posted: str) -> dict:
         "maximumSalary": None,
         "currency": "GBP",
         "date": posted,
+        "expirationDate": "22/12/2026",
         "jobDescription": "Our 2027 graduate programme &amp; more",
         "jobUrl": f"https://www.reed.co.uk/jobs/graduate-data-scientist/{job_id}",
     }
@@ -161,6 +162,7 @@ def test_reed_posting_becomes_a_job(cache):
     assert job.salary_text == "GBP 38000"
     assert job.description == "Our 2027 graduate programme & more"
     assert job.url == "https://www.reed.co.uk/jobs/graduate-data-scientist/7"
+    assert job.closes_at.isoformat() == "2026-12-22T00:00:00+00:00"
 
 
 def test_reed_drops_adverts_older_than_the_search_window(cache):

@@ -1,5 +1,4 @@
 import math
-from datetime import datetime
 
 from job_hunt.common.settings_schema import AdzunaSourceSettings
 from job_hunt.job_sources.html_to_text import html_to_text
@@ -7,6 +6,7 @@ from job_hunt.job_sources.job_boards.job_board_query import JobBoardQuery
 from job_hunt.job_sources.job_boards.search_api_source import ApiPosting, SearchApiSource
 from job_hunt.job_sources.job_source import UNKNOWN_COMPANY_NAME, register_job_source, require_secret
 from job_hunt.job_sources.salary_text import format_salary_range
+from job_hunt.job_sources.timestamps import parse_iso_timestamp
 from job_hunt.job_store.models import FetchedJob
 
 SEARCH_URL = "https://api.adzuna.com/v1/api/jobs/{country_code}/search/{page_number}"
@@ -57,7 +57,7 @@ class AdzunaSource(SearchApiSource):
             url=raw_posting["redirect_url"],
             # a snippet; the full advert is only on the page it links to
             description=html_to_text(raw_posting.get("description")),
-            posted_at=datetime.fromisoformat(raw_posting["created"].replace("Z", "+00:00")),
+            posted_at=parse_iso_timestamp(raw_posting.get("created")),
             employment_type=format_contract(
                 raw_posting.get("contract_type"), raw_posting.get("contract_time")
             ),
