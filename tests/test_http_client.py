@@ -43,3 +43,17 @@ def test_requests_carry_our_user_agent():
     client, sent_requests = make_client_returning([200])
     client.get_text("https://example.com")
     assert sent_requests[0].headers["User-Agent"] == settings.http.user_agent
+
+
+def test_byte_range_and_size_of_a_published_file():
+    data = b"0123456789"
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        if request.method == "HEAD":
+            return httpx.Response(200, headers={"Content-Length": str(len(data))})
+        first, last = map(int, request.headers["Range"].removeprefix("bytes=").split("-"))
+        return httpx.Response(206, content=data[first : last + 1])
+
+    client = HttpClient(settings.http, transport=httpx.MockTransport(answer))
+    assert client.get_content_length("https://data.example/file") == 10
+    assert client.get_byte_range("https://data.example/file", 2, 4) == b"234"

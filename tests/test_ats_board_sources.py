@@ -464,3 +464,17 @@ def test_teamtailor_rss_feed_becomes_jobs(database):
     assert job.location == "London, United Kingdom"
     assert job.description == "Credit risk models."
     assert job.posted_at == datetime(2026, 9, 28, 8, 22, 38, tzinfo=timezone.utc)
+
+
+def test_board_check_needs_a_posting_in_a_target_location(database):
+    london_board = GREENHOUSE_BOARD
+    vague_board = {"jobs": [{"id": 1, "title": "Engineer", "location": {"name": ""}, "offices": []}]}
+    routes = {
+        ("boards-api.greenhouse.io", "/v1/boards/anthropic/jobs"): london_board,
+        ("boards-api.greenhouse.io", "/v1/boards/vague/jobs"): vague_board,
+    }
+    source = make_source(GreenhouseSource, database, routes)
+    assert source.board_has_jobs_in_target_locations("anthropic")
+    # a fetch would keep this posting (no location to rule it out), but it's
+    # not enough to start reading the board every day
+    assert not source.board_has_jobs_in_target_locations("vague")

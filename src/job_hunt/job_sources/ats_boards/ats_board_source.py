@@ -100,6 +100,19 @@ class AtsBoardSource(JobSource[BoardPosting]):
     def _is_in_scope(self, raw_posting: BoardPosting) -> bool:
         return self._location_matcher.matches_any(self._posting_locations(raw_posting.posting))
 
+    # Whether a newly found board is worth tracking: one read of it, true if
+    # any posting names a target location. Stricter than a fetch, which also
+    # keeps postings with no location: a board is read every day once
+    # tracked, so one vague posting shouldn't be enough. HttpRequestError
+    # (404 for a board that's gone) is left to the caller.
+    def board_has_jobs_in_target_locations(self, board_slug: str) -> bool:
+        return any(
+            self._location_matcher.matches(location)
+            for posting in self._fetch_board_postings(board_slug)
+            for location in self._posting_locations(posting)
+            if location
+        )
+
     # Posting ids are only promised unique within one board.
     @staticmethod
     def _source_job_id(company: TrackedCompany, posting_id: Any) -> str:

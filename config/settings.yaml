@@ -245,7 +245,7 @@ default:
     seed_list_path: "@format {this.REPO_ROOT}/config/seed_companies.yaml"
 
   company_discovery:
-    # Web searches limited to ATS domains (site:jobs.ashbyhq.com ...) find
+    # Two ways to find boards. Web searches limited to ATS domains (site:jobs.ashbyhq.com ...) find
     # company boards; each board found is then read in full every day by its
     # ATS source. Run with `job-hunt discover-companies`, daily.
     # Queries: every ATS domain x location x role phrase (168 today). Free
@@ -270,6 +270,17 @@ default:
       region: uk-en
       backend: auto
       timeout_seconds: 15
+    # The second way in, with no search engine: Common Crawl's public URL
+    # index lists every crawled page on each ATS domain, so every board on
+    # it. Each board not yet tracked is read once and kept only if it has a
+    # job in a target location. The first runs work through a few thousand
+    # boards (about an hour per 1,000 checks at one request a second per
+    # ATS); after that only boards new to the crawl.
+    common_crawl:
+      crawls_to_read: 3
+      max_board_checks_per_run: 1000
+      board_recheck_after_hours: 720
+      board_list_cache_ttl_hours: 2160
 
 # used by the test suite; anything that writes goes to a throwaway folder
 testing:

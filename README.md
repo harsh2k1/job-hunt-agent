@@ -16,9 +16,11 @@ Jobs come from:
 - companies' own job boards, read directly: Greenhouse, Lever (global and EU),
   Ashby, Workable, SmartRecruiters, Teamtailor, Recruitee, Pinpoint, Personio,
   BambooHR. The list starts from `config/seed_companies.yaml` (121 London
-  employers with a sponsor licence) and grows two ways: whenever an advert
-  from another source links to a company's board, and through
-  `discover-companies`, which searches the web for boards on those ATSs.
+  employers with a sponsor licence) and grows whenever an advert from another
+  source links to a company's board, and through `discover-companies`, which
+  finds boards two ways: web searches limited to ATS sites, and Common
+  Crawl's public URL index (every crawled board on each ATS, kept if it has
+  UK jobs).
 - coming later:
   discovery, student portals that need a login, the UK sponsor register
 
@@ -43,8 +45,8 @@ job-hunt seed-companies                   # load config/seed_companies.yaml (saf
 job-hunt add-company --name Perplexity --board-url https://jobs.ashbyhq.com/perplexity
 job-hunt add-company --name Anthropic --ats greenhouse --slug anthropic
 job-hunt list-companies                   # boards read on every fetch
-job-hunt discover-companies               # web-search ATS sites for new boards (20 searches a run)
-job-hunt discover-companies --dry-run     # show what would be added
+job-hunt discover-companies               # find new boards: web search + Common Crawl (budgeted, daily)
+job-hunt discover-companies --via common-crawl --dry-run   # one way only, show without adding
 job-hunt list-sources                     # every source, enabled or not
 job-hunt fetch                            # every enabled source
 job-hunt fetch --source indeed --source ashby   # just these (even if disabled)
@@ -94,7 +96,8 @@ job_sources/job_boards/  Indeed, LinkedIn, Glassdoor (JobSpy); Google Jobs (Serp
 job_sources/ats_boards/  Greenhouse, Lever, Ashby, Workable, SmartRecruiters; board link finder
 job_sources/advert_pages/ AdvertPageSource (JobPosting markup); The Intake, jobs.ac.uk
 job_pipeline/            JobFetchRun: runs sources, saves jobs, adds linked companies
-company_discovery/       seed list; board search (web search for ATS boards)
+company_discovery/       seed list; board search (web search); crawl discovery (Common Crawl)
+company_discovery/common_crawl/  reads Common Crawl's URL index files by byte range
 company_discovery/web_search/  SearchProvider + factory; ddgs (free, no key)
 migrations/              (repo root) Alembic environment and migration scripts
 ```

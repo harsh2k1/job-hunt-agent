@@ -212,6 +212,17 @@ class DdgsSearchSettings(StrictModel):
     timeout_seconds: int = Field(gt=0)
 
 
+class CommonCrawlDiscoverySettings(StrictModel):
+    # each monthly crawl samples the web; a few together find more boards
+    crawls_to_read: int = Field(ge=1)
+    # each new board is read once to see if it has target-location jobs
+    max_board_checks_per_run: int = Field(gt=0)
+    # boards without such jobs are left alone this long, then checked again
+    board_recheck_after_hours: float = Field(gt=0)
+    # a crawl's index never changes; its board list is kept this long
+    board_list_cache_ttl_hours: float = Field(gt=0)
+
+
 class CompanyDiscoverySettings(StrictModel):
     # registered search provider name; its block below is used
     search_provider: Literal["ddgs"]
@@ -228,6 +239,7 @@ class CompanyDiscoverySettings(StrictModel):
     max_consecutive_failures: int = Field(gt=0)
     seconds_between_searches: float = Field(ge=0)
     ddgs: DdgsSearchSettings
+    common_crawl: CommonCrawlDiscoverySettings
 
 
 class CompanySeedSettings(StrictModel):

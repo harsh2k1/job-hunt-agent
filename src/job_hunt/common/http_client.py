@@ -48,6 +48,18 @@ class HttpClient:
     ) -> str:
         return self._send_with_retries("GET", url, params=params, headers=headers).text
 
+    # Bytes first to last, inclusive, of a file the server allows ranges on
+    # (large published data files, read a piece at a time).
+    def get_byte_range(self, url: str, first_byte: int, last_byte: int) -> bytes:
+        headers = {"Range": f"bytes={first_byte}-{last_byte}"}
+        return self._send_with_retries("GET", url, headers=headers).content
+
+    def get_content_length(self, url: str) -> int:
+        response = self._send_with_retries("HEAD", url)
+        if "Content-Length" not in response.headers:
+            raise HttpRequestError(f"HEAD {url} gave no Content-Length", status_code=response.status_code)
+        return int(response.headers["Content-Length"])
+
     def post_json(
         self,
         url: str,
