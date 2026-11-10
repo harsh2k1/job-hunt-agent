@@ -35,6 +35,9 @@ class AtsBoardSource(JobSource[BoardPosting]):
     """
 
     ats_platform: ClassVar[AtsPlatform]
+    # where this ATS hosts company boards, for site: searches that find new
+    # companies; a new ATS is searched as soon as it has a reader
+    search_domains: ClassVar[tuple[str, ...]]
     reads_tracked_companies = True
 
     def __init_subclass__(cls, **kwargs: Any):
@@ -109,6 +112,20 @@ class AtsBoardSource(JobSource[BoardPosting]):
             "%s: %s's board %r no longer exists; deactivated", self.name, company.name, company.ats_board_slug
         )
         self._company_repository.deactivate_company(company.ats_platform, company.ats_board_slug)
+
+
+# Subdomains on an ATS's own domain that are its website, not a company board
+NON_BOARD_SUBDOMAINS = frozenset({"www", "app", "api", "help", "support", "blog", "docs", "developers"})
+
+
+# "adarga.recruitee.com" -> "adarga" for board_domain "recruitee.com"; also
+# keeps a regional part, "miracare.na.teamtailor.com" -> "miracare.na"
+def company_subdomain(url: SplitResult, board_domain: str) -> str | None:
+    host = url.hostname or ""
+    if not host.endswith(f".{board_domain}"):
+        return None
+    subdomain = host[: -len(board_domain) - 1]
+    return None if subdomain.split(".")[0] in NON_BOARD_SUBDOMAINS else subdomain
 
 
 def first_path_segment(url: SplitResult) -> str | None:

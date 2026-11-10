@@ -99,14 +99,7 @@ def read_salary_text(job_posting: JobPostingMarkup) -> str | None:
     value = salary.get("value")
     if not isinstance(value, dict):
         value = {"value": value}
-    low = _to_amount(value.get("minValue", value.get("value")))
-    high = _to_amount(value.get("maxValue"))
+    low = value.get("minValue", value.get("value"))
+    high = value.get("maxValue")
     interval = SALARY_INTERVALS.get(str(value.get("unitText") or salary.get("unitText") or "").upper())
     return format_salary_range(salary.get("currency"), low, high, interval)
-
-
-def _to_amount(value: Any) -> float | None:
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return None

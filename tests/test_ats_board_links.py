@@ -25,6 +25,17 @@ from job_hunt.job_store.models import AtsPlatform
             AtsPlatform.SMARTRECRUITERS,
             "boschgroup",
         ),
+        (
+            "https://propertyfinder.teamtailor.com/jobs/8450997-data-scientist",
+            AtsPlatform.TEAMTAILOR,
+            "propertyfinder",
+        ),
+        ("https://miracare.na.teamtailor.com/jobs/726027", AtsPlatform.TEAMTAILOR, "miracare.na"),
+        ("https://adarga.recruitee.com/o/platform-engineer-us", AtsPlatform.RECRUITEE, "adarga"),
+        ("https://cfc.pinpointhq.com/en/postings/b420c1a4", AtsPlatform.PINPOINT, "cfc"),
+        ("https://meiragtx.jobs.personio.de/job/2845942?language=en", AtsPlatform.PERSONIO, "meiragtx"),
+        ("https://calmlife.jobs.personio.com/", AtsPlatform.PERSONIO, "calmlife"),
+        ("https://clearspace.bamboohr.com/careers/list", AtsPlatform.BAMBOOHR, "clearspace"),
     ],
 )
 def test_board_is_found_from_any_link_to_it(url, platform, slug):
@@ -39,6 +50,11 @@ def test_board_is_found_from_any_link_to_it(url, platform, slug):
         # a Workable job link with no company slug in it
         "https://apply.workable.com/j/81B46579FE",
         "https://jobs.lever.co/",
+        # the ATS vendors' own sites and apps
+        "https://www.teamtailor.com/en/pricing",
+        "https://app.bamboohr.com/login/",
+        "https://clearspace.bamboohr.com/home",
+        "https://www.bamboohr.com/careers/list",
         "not a url",
     ],
 )
@@ -54,6 +70,11 @@ def test_every_ats_platform_with_a_reader_is_recognised():
         AtsPlatform.ASHBY,
         AtsPlatform.WORKABLE,
         AtsPlatform.SMARTRECRUITERS,
+        AtsPlatform.TEAMTAILOR,
+        AtsPlatform.RECRUITEE,
+        AtsPlatform.PINPOINT,
+        AtsPlatform.PERSONIO,
+        AtsPlatform.BAMBOOHR,
     }
 
 

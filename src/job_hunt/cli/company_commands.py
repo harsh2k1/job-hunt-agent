@@ -2,6 +2,7 @@ import argparse
 
 from job_hunt.cli.cli_command import EXIT_FAILURE, EXIT_SUCCESS, CliCommand, register_cli_command
 from job_hunt.common.settings import settings
+from job_hunt.company_discovery.board_search import BoardSearchDiscovery, BoardSearchError
 from job_hunt.company_discovery.seed_list import load_seed_companies
 from job_hunt.job_sources.ats_boards.ats_board_links import AtsBoardLink, find_ats_board
 from job_hunt.job_store.company_repository import CompanyRepository
@@ -63,6 +64,31 @@ class SeedCompaniesCommand(CliCommand):
         seed_companies = load_seed_companies(settings.companies.seed_list_path)
         added = sum(repository.add_company_if_new(company) for company in seed_companies)
         print(f"Added {added} of {len(seed_companies)} seed companies; the rest were already tracked.")
+        return EXIT_SUCCESS
+
+
+@register_cli_command
+class DiscoverCompaniesCommand(CliCommand):
+    name = "discover-companies"
+    summary = "find company job boards through web search and start tracking them"
+
+    def add_arguments(self, parser: argparse.ArgumentParser) -> None:
+        parser.add_argument("--dry-run", action="store_true", help="show new boards without tracking them")
+
+    def run(self, args: argparse.Namespace) -> int:
+        try:
+            report = BoardSearchDiscovery.from_settings().run(dry_run=args.dry_run)
+        except BoardSearchError as error:
+            print(f"Discovery failed: {error}")
+            return EXIT_FAILURE
+        for company in report.new_companies:
+            print(f"{company.name:<30} {company.ats_platform.value:<16} {company.ats_board_slug}")
+        verb = "would be added" if args.dry_run else "added"
+        print(
+            f"{report.queries} queries: {report.cached_queries} from cache, {report.searches_run} searched "
+            f"({report.failed_queries} failed), {report.deferred_queries} left for the next run. "
+            f"{len(report.boards_found)} boards found, {len(report.new_companies)} new {verb}."
+        )
         return EXIT_SUCCESS
 
 

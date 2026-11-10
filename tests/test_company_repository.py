@@ -40,3 +40,13 @@ def test_listing_can_be_filtered_by_platform(database):
 def test_deactivating_an_unknown_company_is_an_error(database):
     with pytest.raises(CompanyNotFoundError):
         CompanyRepository(database).deactivate_company(AtsPlatform.LEVER, "nobody")
+
+
+def test_known_boards_include_deactivated_ones(database):
+    repository = CompanyRepository(database)
+    repository.add_company_if_new(make_company("perplexity"))
+    repository.deactivate_company(AtsPlatform.ASHBY, "perplexity")
+
+    assert repository.is_known(AtsPlatform.ASHBY, "perplexity")
+    assert not repository.is_known(AtsPlatform.ASHBY, "anthropic")
+    assert not repository.is_known(AtsPlatform.LEVER, "perplexity")

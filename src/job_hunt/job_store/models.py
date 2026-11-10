@@ -38,6 +38,8 @@ class AtsPlatform(str, Enum):
     TEAMTAILOR = "teamtailor"
     RECRUITEE = "recruitee"
     PINPOINT = "pinpoint"
+    PERSONIO = "personio"
+    BAMBOOHR = "bamboohr"
 
 
 # Stored as its value ("greenhouse") in a plain string column rather than a

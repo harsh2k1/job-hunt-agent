@@ -11,16 +11,21 @@ import pytest
 from job_hunt.common.http_client import HttpClient
 from job_hunt.common.settings import settings
 from job_hunt.job_sources.ats_boards.ashby import AshbySource
+from job_hunt.job_sources.ats_boards.bamboohr import BambooHrSource
 from job_hunt.job_sources.ats_boards.greenhouse import GreenhouseSource
 from job_hunt.job_sources.ats_boards.lever import LeverEuSource, LeverSource
+from job_hunt.job_sources.ats_boards.personio import PersonioSource
+from job_hunt.job_sources.ats_boards.pinpoint import PinpointSource
+from job_hunt.job_sources.ats_boards.recruitee import RecruiteeSource
 from job_hunt.job_sources.ats_boards.smartrecruiters import SmartRecruitersSource
+from job_hunt.job_sources.ats_boards.teamtailor import TeamtailorSource
 from job_hunt.job_sources.ats_boards.workable import WorkableSource
 from job_hunt.job_sources.job_source import JobSourceError
 from job_hunt.job_sources.location_matching import TargetLocationMatcher
 from job_hunt.job_store.company_repository import CompanyRepository
 from job_hunt.job_store.models import AtsPlatform, DiscoveredCompany
 
-# route: (host, path) -> JSON body, or an int for an error status
+# route: (host, path) -> JSON body, a str for an XML/RSS body, or an int for an error status
 Routes = dict[tuple[str, str], Any]
 
 
@@ -33,6 +38,9 @@ def make_http_client(routes: Routes, seen_requests: list[httpx.Request] | None =
             body = body(request)
         if isinstance(body, int):
             return httpx.Response(body)
+        # XML and RSS feeds
+        if isinstance(body, str):
+            return httpx.Response(200, text=body)
         return httpx.Response(200, json=body)
 
     return HttpClient(settings.http, transport=httpx.MockTransport(answer))
@@ -278,3 +286,181 @@ def test_malformed_posting_is_skipped_not_fatal(database):
     broken_board = {"jobs": [{"id": "no-title", "location": "London"}, *ASHBY_BOARD["jobs"]]}
     routes = {("api.ashbyhq.com", "/posting-api/job-board/perplexity"): broken_board}
     assert [job.title for job in make_source(AshbySource, database, routes).fetch_jobs()] == ["AI Engineer"]
+
+
+RECRUITEE_BOARD = {
+    "offers": [
+        {
+            "id": 2709801,
+            "title": "Machine Learning Engineer",
+            "careers_url": "https://adarga.recruitee.com/o/machine-learning-engineer",
+            "location": "Bristol, England, United Kingdom",
+            "locations": [{"city": "London", "country": "United Kingdom"}],
+            "description": "<p>Build AI systems.</p>",
+            "requirements": "<p>Python.</p>",
+            "published_at": "2026-08-13 14:26:26 UTC",
+            "close_at": "2026-12-01 00:00:00 UTC",
+            "employment_type_code": "fulltime_permanent",
+            "salary": {"min": 50000, "max": 65000, "period": "year", "currency": "GBP"},
+            "remote": False,
+        },
+        {
+            "id": 1,
+            "title": "Platform Engineer - US",
+            "careers_url": "https://adarga.recruitee.com/o/platform-engineer-us",
+            "location": "Herndon, Virginia, United States",
+            "locations": [],
+        },
+    ]
+}
+
+
+def test_recruitee_reads_both_advert_halves_and_the_deadline(database):
+    track(database, AtsPlatform.RECRUITEE, "adarga", "Adarga")
+    routes = {("adarga.recruitee.com", "/api/offers/"): RECRUITEE_BOARD}
+    [job] = make_source(RecruiteeSource, database, routes).fetch_jobs()
+
+    assert job.location == "Bristol, England, United Kingdom; London, United Kingdom"
+    assert job.description == "Build AI systems.\n\nPython."
+    assert job.posted_at == datetime(2026, 8, 13, 14, 26, 26, tzinfo=timezone.utc)
+    assert job.closes_at == datetime(2026, 12, 1, tzinfo=timezone.utc)
+    assert job.salary_text == "GBP 50000-65000 year"
+
+
+PINPOINT_BOARD = {
+    "data": [
+        {
+            "id": "160931",
+            "title": "Graduate Data Analyst",
+            "url": "https://cfc.pinpointhq.com/en/postings/b43cc73e",
+            "location": {"city": "London", "name": "UK - London"},
+            "description": "<div>Join the data team.</div>",
+            "key_responsibilities": "<div>Build dashboards.</div>",
+            "deadline_at": "2026-11-30T23:59:00Z",
+            "employment_type_text": "Permanent - Full Time",
+            "workplace_type": "hybrid",
+            "compensation_visible": False,
+            "compensation_minimum": 30000,
+        },
+        {
+            "id": "2",
+            "title": "Underwriter",
+            "url": "https://cfc.pinpointhq.com/en/postings/2",
+            "location": {"name": "Austin, TX"},
+        },
+    ]
+}
+
+
+def test_pinpoint_joins_the_advert_sections_and_hides_unpublished_salaries(database):
+    track(database, AtsPlatform.PINPOINT, "cfc", "CFC")
+    routes = {("cfc.pinpointhq.com", "/postings.json"): PINPOINT_BOARD}
+    [job] = make_source(PinpointSource, database, routes).fetch_jobs()
+
+    assert job.title == "Graduate Data Analyst"
+    assert job.description == "Join the data team.\n\nBuild dashboards."
+    assert job.closes_at == datetime(2026, 11, 30, 23, 59, tzinfo=timezone.utc)
+    # the employer chose not to show it
+    assert job.salary_text is None
+
+
+PERSONIO_FEED = """<?xml version="1.0" encoding="UTF-8"?>
+<workzag-jobs>
+<position>
+    <id>2877545</id>
+    <office>London</office>
+    <additionalOffices><office>Berlin</office></additionalOffices>
+    <name>Junior Data Scientist </name>
+    <jobDescriptions>
+        <jobDescription>
+            <name>Your mission</name>
+            <value><![CDATA[<p>Model patient outcomes.</p>]]></value>
+        </jobDescription>
+    </jobDescriptions>
+    <employmentType>permanent</employmentType>
+    <schedule>full-time</schedule>
+    <createdAt>2026-10-27T09:33:56+00:00</createdAt>
+</position>
+<position>
+    <id>1</id>
+    <office>Munich</office>
+    <name>Werkstudent</name>
+</position>
+</workzag-jobs>"""
+
+
+def test_personio_feed_is_read_from_xml(database):
+    track(database, AtsPlatform.PERSONIO, "calmlife", "Calmlife")
+    routes = {("calmlife.jobs.personio.de", "/xml"): PERSONIO_FEED}
+    [job] = make_source(PersonioSource, database, routes).fetch_jobs()
+
+    assert job.title == "Junior Data Scientist"
+    assert job.location == "London; Berlin"
+    assert job.url == "https://calmlife.jobs.personio.de/job/2877545?language=en"
+    assert job.description == "Your mission\n\nModel patient outcomes."
+    assert job.employment_type == "permanent, full-time"
+
+
+BAMBOOHR_BOARD = {
+    "result": [
+        {
+            "id": "28",
+            "jobOpeningName": "Data Engineer ",
+            "employmentStatusLabel": "Full-Time",
+            "location": {"city": "London", "state": "London, City of"},
+            "atsLocation": {"country": "United Kingdom", "city": None},
+            "isRemote": None,
+        },
+        {"id": "31", "jobOpeningName": "QA Engineer", "location": {"city": "Luxembourg"}, "atsLocation": {}},
+    ]
+}
+
+
+def test_bamboohr_list_becomes_jobs_without_adverts(database):
+    track(database, AtsPlatform.BAMBOOHR, "clearspace", "ClearSpace")
+    routes = {("clearspace.bamboohr.com", "/careers/list"): BAMBOOHR_BOARD}
+    [job] = make_source(BambooHrSource, database, routes).fetch_jobs()
+
+    assert job.title == "Data Engineer"
+    assert job.location == "London, London, City of; United Kingdom"
+    assert job.url == "https://clearspace.bamboohr.com/careers/28"
+    assert job.description is None
+
+
+TEAMTAILOR_FEED = """<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:tt="https://teamtailor.com/locations">
+  <channel>
+    <item>
+      <title>Data Scientist</title>
+      <description>&lt;p&gt;Credit risk models.&lt;/p&gt;</description>
+      <pubDate>Mon, 28 Sep 2026 09:22:38 +0100</pubDate>
+      <link>https://creditspring.teamtailor.com/jobs/8462850-data-scientist</link>
+      <remoteStatus>hybrid</remoteStatus>
+      <guid>8b06eb17-e38b-44d6-bec9-278d9119d134</guid>
+      <tt:locations>
+        <tt:location>
+          <tt:name>London Office</tt:name>
+          <tt:city>London</tt:city>
+          <tt:country>United Kingdom</tt:country>
+        </tt:location>
+      </tt:locations>
+    </item>
+    <item>
+      <title>Account Executive</title>
+      <link>https://creditspring.teamtailor.com/jobs/1</link>
+      <guid>1</guid>
+      <tt:locations><tt:location><tt:city>Stockholm</tt:city><tt:country>Sweden</tt:country></tt:location></tt:locations>
+    </item>
+  </channel>
+</rss>"""
+
+
+def test_teamtailor_rss_feed_becomes_jobs(database):
+    track(database, AtsPlatform.TEAMTAILOR, "creditspring", "Creditspring")
+    routes = {("creditspring.teamtailor.com", "/jobs.rss"): TEAMTAILOR_FEED}
+    [job] = make_source(TeamtailorSource, database, routes).fetch_jobs()
+
+    assert job.source_job_id == "creditspring:8b06eb17-e38b-44d6-bec9-278d9119d134"
+    assert job.location == "London, United Kingdom"
+    assert job.description == "Credit risk models."
+    assert job.posted_at == datetime(2026, 9, 28, 8, 22, 38, tzinfo=timezone.utc)

@@ -13,6 +13,7 @@ BOARD_API_URL = "https://api.ashbyhq.com/posting-api/job-board/{board_slug}"
 @register_job_source
 class AshbySource(AtsBoardSource):
     ats_platform = AtsPlatform.ASHBY
+    search_domains = (BOARD_HOST,)
 
     @classmethod
     def board_slug_from_url(cls, url: SplitResult) -> str | None:

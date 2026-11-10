@@ -197,6 +197,37 @@ class JobSourcesSettings(StrictModel):
     ashby: AtsSourceSettings
     workable: AtsSourceSettings
     smartrecruiters: SmartRecruitersSourceSettings
+    teamtailor: AtsSourceSettings
+    recruitee: AtsSourceSettings
+    pinpoint: AtsSourceSettings
+    personio: AtsSourceSettings
+    bamboohr: AtsSourceSettings
+
+
+class DdgsSearchSettings(StrictModel):
+    # ddgs region code, e.g. uk-en
+    region: str
+    # which engines ddgs asks; "auto" lets it pick and fall back
+    backend: str
+    timeout_seconds: int = Field(gt=0)
+
+
+class CompanyDiscoverySettings(StrictModel):
+    # registered search provider name; its block below is used
+    search_provider: Literal["ddgs"]
+    # short and plain: each one is searched on every ATS domain in every
+    # job_search location
+    role_phrases: list[str] = Field(min_length=1)
+    results_per_query: int = Field(gt=0, le=50)
+    # companies rarely move ATS, so a week-old search is still good
+    cache_ttl_hours: float = Field(gt=0)
+    # Free engines block bursts, so a run sends at most this many searches
+    # and the next run carries on with the rest of the queries.
+    max_searches_per_run: int = Field(gt=0)
+    # this many failures in a row stops the run: the engine is pushing back
+    max_consecutive_failures: int = Field(gt=0)
+    seconds_between_searches: float = Field(ge=0)
+    ddgs: DdgsSearchSettings
 
 
 class CompanySeedSettings(StrictModel):
@@ -213,3 +244,4 @@ class Settings(StrictModel):
     job_search: JobSearchSettings
     job_sources: JobSourcesSettings
     companies: CompanySeedSettings
+    company_discovery: CompanyDiscoverySettings

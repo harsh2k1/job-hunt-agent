@@ -15,6 +15,7 @@ REMOTE_WORKPLACE_TYPE = "remote"
 class LeverSource(AtsBoardSource):
     ats_platform = AtsPlatform.LEVER
     board_host: ClassVar[str] = "jobs.lever.co"
+    search_domains = ("jobs.lever.co",)
     board_api_url: ClassVar[str] = "https://api.lever.co/v0/postings/{board_slug}"
 
     @classmethod
@@ -55,6 +56,7 @@ class LeverSource(AtsBoardSource):
 class LeverEuSource(LeverSource):
     ats_platform = AtsPlatform.LEVER_EU
     board_host = "jobs.eu.lever.co"
+    search_domains = ("jobs.eu.lever.co",)
     board_api_url = "https://api.eu.lever.co/v0/postings/{board_slug}"
 
 

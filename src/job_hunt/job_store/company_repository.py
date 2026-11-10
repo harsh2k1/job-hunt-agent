@@ -23,6 +23,11 @@ class CompanyRepository:
             session.add(TrackedCompany(**company.model_dump()))
             return True
 
+    # deactivated boards count as known too, for the same reason
+    def is_known(self, ats_platform: AtsPlatform, ats_board_slug: str) -> bool:
+        with self._database.session_scope() as session:
+            return self._find_company(session, ats_platform, ats_board_slug) is not None
+
     def list_active_companies(self, ats_platform: AtsPlatform | None = None) -> list[TrackedCompany]:
         with self._database.session_scope() as session:
             statement = select(TrackedCompany).where(TrackedCompany.is_active)

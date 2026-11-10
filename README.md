@@ -14,10 +14,12 @@ Jobs come from:
   (universities and research institutes), read from each advert's
   schema.org JobPosting markup, closing dates included
 - companies' own job boards, read directly: Greenhouse, Lever (global and EU),
-  Ashby, Workable, SmartRecruiters. The list starts from
-  `config/seed_companies.yaml` (121 London employers with a sponsor licence)
-  and grows whenever a job-board advert links to a company's board.
-- coming later: search-engine
+  Ashby, Workable, SmartRecruiters, Teamtailor, Recruitee, Pinpoint, Personio,
+  BambooHR. The list starts from `config/seed_companies.yaml` (121 London
+  employers with a sponsor licence) and grows two ways: whenever an advert
+  from another source links to a company's board, and through
+  `discover-companies`, which searches the web for boards on those ATSs.
+- coming later:
   discovery, student portals that need a login, the UK sponsor register
 
 ## Setup
@@ -41,6 +43,8 @@ job-hunt seed-companies                   # load config/seed_companies.yaml (saf
 job-hunt add-company --name Perplexity --board-url https://jobs.ashbyhq.com/perplexity
 job-hunt add-company --name Anthropic --ats greenhouse --slug anthropic
 job-hunt list-companies                   # boards read on every fetch
+job-hunt discover-companies               # web-search ATS sites for new boards (20 searches a run)
+job-hunt discover-companies --dry-run     # show what would be added
 job-hunt list-sources                     # every source, enabled or not
 job-hunt fetch                            # every enabled source
 job-hunt fetch --source indeed --source ashby   # just these (even if disabled)
@@ -90,6 +94,8 @@ job_sources/job_boards/  Indeed, LinkedIn, Glassdoor (JobSpy); Google Jobs (Serp
 job_sources/ats_boards/  Greenhouse, Lever, Ashby, Workable, SmartRecruiters; board link finder
 job_sources/advert_pages/ AdvertPageSource (JobPosting markup); The Intake, jobs.ac.uk
 job_pipeline/            JobFetchRun: runs sources, saves jobs, adds linked companies
+company_discovery/       seed list; board search (web search for ATS boards)
+company_discovery/web_search/  SearchProvider + factory; ddgs (free, no key)
 migrations/              (repo root) Alembic environment and migration scripts
 ```
 
@@ -119,8 +125,11 @@ registry, so adding one is a single class plus its settings block:
   settings.yaml and its model in `settings_schema.py`. A test checks every
   source has settings and every settings block has a source.
 - **ATS**: subclass `AtsBoardSource`, set `ats_platform` (add it to
-  `AtsPlatform`; no migration needed), and implement `board_slug_from_url`, so
-  links to the new ATS are recognised too.
+  `AtsPlatform`; no migration needed) and `search_domains`, and implement
+  `board_slug_from_url`, so links to the new ATS are recognised and searched.
 - **Database or cache backend**: subclass `DatabaseBackend` / `CacheBackend` in
   its `backends.py` and register it.
+- **Search provider**: subclass `SearchProvider`, decorate with
+  `@register_search_provider`, add its name to `company_discovery.search_provider`.
+  An ATS reader's `search_domains` are searched automatically.
 - **Command**: subclass `CliCommand` and decorate with `@register_cli_command`.

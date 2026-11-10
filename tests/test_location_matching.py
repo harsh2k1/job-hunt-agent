@@ -46,6 +46,7 @@ def test_joined_locations_drop_blanks_and_repeats_but_keep_order():
         ("Manchester, Greater Manchester", True),
         ("Remote (UK)", True),
         ("Cardiff, Wales", True),
+        ("Sydney, New South Wales, Australia", False),
         ("New York, NY", False),
         ("Reading the room is part of the job", False),
         ("Kyiv, Ukraine", False),

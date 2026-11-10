@@ -84,7 +84,8 @@ default:
     # The Intake, jobs.ac.uk). Whole words, any case: "uk" matches
     # "Remote - UK" but not "Ukraine". Cities are listed because adverts often
     # give only the city. Left out on purpose: names that are also everyday
-    # words or US places in adverts (Reading, Bath, York). Postings with no
+    # words or places elsewhere (Reading, Bath, York; "wales" would match New
+    # South Wales, so Welsh cities are listed instead). Postings with no
     # location at all are kept so they can be checked by hand.
     target_location_keywords:
       - london
@@ -92,7 +93,6 @@ default:
       - uk
       - england
       - scotland
-      - wales
       - northern ireland
       - great britain
       - britain
@@ -113,6 +113,7 @@ default:
       - nottingham
       - liverpool
       - southampton
+      - swansea
     # daily runs overlap by design; already-seen jobs are only updated
     max_posting_age_hours: 168
     indeed_country: UK
@@ -226,12 +227,49 @@ default:
       enabled: true
       country_code: gb
       page_size: 100
+    teamtailor:
+      enabled: true
+    recruitee:
+      enabled: true
+    pinpoint:
+      enabled: true
+    personio:
+      enabled: true
+    bamboohr:
+      enabled: true
 
   companies:
     # London AI / data / tech employers that hold a Skilled Worker sponsor
     # licence and have a board on a supported ATS; checked against the Home
     # Office register before being added here
     seed_list_path: "@format {this.REPO_ROOT}/config/seed_companies.yaml"
+
+  company_discovery:
+    # Web searches limited to ATS domains (site:jobs.ashbyhq.com ...) find
+    # company boards; each board found is then read in full every day by its
+    # ATS source. Run with `job-hunt discover-companies`, daily.
+    # Queries: every ATS domain x location x role phrase (168 today). Free
+    # engines block a burst (168 in a row got this machine rate-limited on
+    # 2026-11-10), so each run sends at most max_searches_per_run and the
+    # next run carries on; at 20 a day, every query is covered in about 8
+    # days, and the week-long cache keeps the cycle going.
+    search_provider: ddgs
+    role_phrases:
+      - data scientist
+      - machine learning engineer
+      - AI engineer
+      - graduate data
+      - machine learning intern
+      - research scientist
+    results_per_query: 20
+    cache_ttl_hours: 168
+    max_searches_per_run: 20
+    max_consecutive_failures: 3
+    seconds_between_searches: 5
+    ddgs:
+      region: uk-en
+      backend: auto
+      timeout_seconds: 15
 
 # used by the test suite; anything that writes goes to a throwaway folder
 testing:
@@ -249,3 +287,5 @@ testing:
     max_retries: 2
     backoff_seconds: 0
     min_seconds_between_requests_to_same_host: 0
+  company_discovery:
+    seconds_between_searches: 0
