@@ -29,4 +29,4 @@ def test_a_broken_step_is_reported_and_the_rest_still_run():
 
 def test_steps_run_in_order_and_skipped_ones_are_left_out():
     run = DailyRun.from_settings(include_discovery=False, include_sponsor_register=False)
-    assert run.step_names == ["fetch", "source health", "Google Sheet"]
+    assert run.step_names == ["fetch", "source health", "LLM screening", "Google Sheet"]

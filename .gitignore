@@ -225,6 +225,8 @@ notes/
 # Secrets (dynaconf)
 .secrets.yaml
 config/.secrets.yaml
+# the candidate's own profile, used for LLM screening
+config/candidate_profile.yaml
 # Gmail OAuth client for reading job alerts
 config/gmail_client_secret.json
 

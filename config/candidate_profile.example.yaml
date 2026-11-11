@@ -1,0 +1,15 @@
+# Copy to config/candidate_profile.yaml (gitignored) and edit. Sent with every
+# LLM screening batch, so keep it short; changing it re-screens every job.
+summary: >-
+  MSc Data Science student at King's College London, graduating September
+  2027. Python, SQL, machine learning, deep learning, NLP, statistics.
+looking_for: >-
+  Graduate schemes, entry-level and junior roles, and internships in data
+  science, machine learning and AI (data analyst and data engineer roles
+  are a reasonable second choice).
+availability: >-
+  Full-time from September 2027. Internships and placements while still
+  studying, e.g. summer 2027.
+work_authorisation: >-
+  Needs visa sponsorship for full-time roles after graduating (Graduate
+  visa possible for two years). Based in London; anywhere in the UK is fine.

@@ -11,11 +11,15 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from job_hunt.job_pipeline.listings import Listing
+from job_hunt.job_store.models import ListingScreening
 from job_hunt.job_store.sponsor_repository import SponsorRepository
 
 USER_COLUMNS = ("Status", "Notes")
 KEY_COLUMN = "Listing key"
 FOUND_BY_AGENT = "agent"
+NOT_SCREENED = "not screened yet"
+# Jobs tab order: the best fits first
+FIT_ORDER = {"strong": 0, "good": 1, "check": 2, NOT_SCREENED: 3}
 
 
 @dataclass(frozen=True)
@@ -39,8 +43,25 @@ def _first_fetched(listing: Listing) -> datetime:
     return min(job.first_seen_at for job in listing.sightings)
 
 
-def jobs_columns(sponsor_status: Callable[[str], str]) -> list[SheetColumn]:
+ScreeningOf = Callable[[Listing], ListingScreening | None]
+
+
+def fit_of(screening: ListingScreening | None) -> str:
+    return screening.fit if screening else NOT_SCREENED
+
+
+def jobs_columns(sponsor_status: Callable[[str], str], screening_of: ScreeningOf) -> list[SheetColumn]:
+    def screened(read: Callable[[ListingScreening], str | int | None]) -> Callable[[Listing], str]:
+        def value(listing: Listing) -> str:
+            screening = screening_of(listing)
+            result = read(screening) if screening else None
+            return "" if result is None else str(result)
+
+        return value
+
     return [
+        SheetColumn("Fit", lambda listing: fit_of(screening_of(listing))),
+        SheetColumn("Why", screened(lambda screening: screening.reason)),
         SheetColumn("Title", lambda listing: listing.primary.title),
         SheetColumn("Company", lambda listing: listing.primary.company_name),
         SheetColumn("Location", lambda listing: listing.primary.location or ""),
@@ -49,6 +70,8 @@ def jobs_columns(sponsor_status: Callable[[str], str]) -> list[SheetColumn]:
         SheetColumn("Type", lambda listing: listing.primary.employment_type or ""),
         SheetColumn("Salary", lambda listing: listing.primary.salary_text or ""),
         SheetColumn("Sponsor licence", lambda listing: sponsor_status(listing.primary.company_name)),
+        SheetColumn("Sponsorship in advert", screened(lambda screening: screening.sponsorship)),
+        SheetColumn("Start", screened(lambda screening: screening.start_date)),
         SheetColumn("Found on", lambda listing: ", ".join(listing.sources)),
         SheetColumn("First fetched", lambda listing: _date(_first_fetched(listing))),
         SheetColumn("Found by", lambda listing: FOUND_BY_AGENT),
@@ -92,10 +115,15 @@ class SponsorStatusLookup:
         return self._by_name[company_name]
 
 
-# soonest deadline first, then the newest; no deadline last
-def _jobs_order(listing: Listing) -> tuple[bool, str, float]:
+# best fit first; then soonest deadline, no deadline last; then newest
+def _jobs_order(listing: Listing, screening_of: ScreeningOf) -> tuple[int, bool, str, float]:
     closes = listing.closes_at
-    return (closes is None, closes.isoformat() if closes else "", -_first_fetched(listing).timestamp())
+    return (
+        FIT_ORDER.get(fit_of(screening_of(listing)), len(FIT_ORDER)),
+        closes is None,
+        closes.isoformat() if closes else "",
+        -_first_fetched(listing).timestamp(),
+    )
 
 
 @dataclass(frozen=True)
@@ -124,11 +152,11 @@ def read_user_cells(existing_rows: list[list[str]]) -> UserCells:
 
 
 def build_jobs_rows(
-    listings: list[Listing], columns: list[SheetColumn], user_cells: UserCells
+    listings: list[Listing], columns: list[SheetColumn], user_cells: UserCells, screening_of: ScreeningOf
 ) -> list[list[str]]:
     header = [column.header for column in columns] + list(USER_COLUMNS) + [KEY_COLUMN]
     rows = [header]
-    for listing in sorted(listings, key=_jobs_order):
+    for listing in sorted(listings, key=lambda listing: _jobs_order(listing, screening_of)):
         kept = user_cells.by_key.get(listing.key, [""] * len(USER_COLUMNS))
         rows.append([column.value(listing) for column in columns] + kept + [listing.key])
     # the user's own rows, after the agent's, cut or padded to the header

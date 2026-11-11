@@ -165,3 +165,30 @@ class SourceRun(SQLModel, table=True):
     @classmethod
     def store_times_as_utc(cls, value: datetime) -> datetime:
         return to_utc(value)
+
+
+class ListingScreening(SQLModel, table=True):
+    """The LLM's verdict on one listing, kept so a listing is only ever sent
+    again when its advert or the candidate's profile changes."""
+
+    __tablename__ = "listing_screenings"
+
+    listing_key: str = Field(primary_key=True)
+    # hash of what was sent (advert and profile); a different hash means
+    # the verdict is out of date
+    content_hash: str
+    # strong / good / check / skip
+    fit: str
+    reason: str
+    # offered / not offered / not stated
+    sponsorship: str
+    # as the advert words it, e.g. "September 2027"
+    start_date: str | None = None
+    experience_years: int | None = None
+    model: str
+    screened_at: datetime = Field(default_factory=utc_now)
+
+    @field_validator("screened_at")
+    @classmethod
+    def store_time_as_utc(cls, value: datetime) -> datetime:
+        return to_utc(value)

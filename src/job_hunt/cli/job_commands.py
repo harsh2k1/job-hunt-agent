@@ -6,6 +6,7 @@ from job_hunt.common.settings import settings
 from job_hunt.job_pipeline.daily_run import DailyRun
 from job_hunt.job_pipeline.job_fetch_run import JobFetchRun, SourceFetchReport
 from job_hunt.job_pipeline.listings import ListingBuilder
+from job_hunt.job_pipeline.screening_run import screen_live_listings
 from job_hunt.job_pipeline.source_health import HealthStatus, SourceHealthCheck
 from job_hunt.job_sources.job_source_factory import JobSourceFactory
 from job_hunt.job_sources.location_matching import TargetLocationMatcher
@@ -142,3 +143,14 @@ class SyncSheetCommand(CliCommand):
             return EXIT_FAILURE
         print(f"Sheet updated: {kept} listings on Jobs, {skipped} on Skipped (with the reason).")
         return EXIT_SUCCESS
+
+
+@register_cli_command
+class ScreenListingsCommand(CliCommand):
+    name = "screen-listings"
+    summary = "LLM-screen the listings the rules keep (only new or changed ones; capped per run)"
+
+    def run(self, args: argparse.Namespace) -> int:
+        report = screen_live_listings()
+        print(f"Screening: {report.summary()}.")
+        return EXIT_FAILURE if report.failed_batches or report.stopped_by_usage_limit else EXIT_SUCCESS

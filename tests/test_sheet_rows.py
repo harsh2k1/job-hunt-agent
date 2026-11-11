@@ -14,7 +14,8 @@ from job_hunt.sheet_sync.sheet_rows import (
 )
 
 NOW = datetime(2026, 11, 11, 9, 0, tzinfo=timezone.utc)
-COLUMNS = jobs_columns(lambda company: "exact")
+NO_SCREENING = lambda listing: None  # noqa: E731
+COLUMNS = jobs_columns(lambda company: "exact", NO_SCREENING)
 
 
 def listing(key: str, title: str, closes_in_days: int | None = None) -> Listing:
@@ -37,28 +38,34 @@ def test_jobs_are_ordered_by_deadline_and_say_who_found_them():
         [listing("a", "No deadline"), listing("b", "Closes later", 20), listing("c", "Closes soon", 3)],
         COLUMNS,
         read_user_cells([]),
+        NO_SCREENING,
     )
     header = rows[0]
-    assert [row[0] for row in rows[1:]] == ["Closes soon", "Closes later", "No deadline"]
+    title = header.index("Title")
+    assert [row[title] for row in rows[1:]] == ["Closes soon", "Closes later", "No deadline"]
+    assert rows[1][header.index("Fit")] == "not screened yet"
     assert header[-3:] == ["Status", "Notes", KEY_COLUMN]
     assert rows[1][header.index("Found by")] == "agent"
     assert rows[1][header.index("Found on")] == "greenhouse"
 
 
 def test_the_users_status_notes_and_own_rows_survive_a_resync():
-    first = build_jobs_rows([listing("a", "Data Scientist", 5)], COLUMNS, read_user_cells([]))
+    first = build_jobs_rows([listing("a", "Data Scientist", 5)], COLUMNS, read_user_cells([]), NO_SCREENING)
     header = first[0]
     first[1][header.index("Status")] = "Applied"
     own_row = [""] * len(header)
-    own_row[0], own_row[header.index("Found by")] = "Friend's referral at Revolut", "self"
+    own_row[header.index("Title")], own_row[header.index("Found by")] = "Friend's referral at Revolut", "self"
     first.append(own_row)
 
     second = build_jobs_rows(
-        [listing("a", "Data Scientist", 5), listing("b", "ML Engineer", 9)], COLUMNS, read_user_cells(first)
+        [listing("a", "Data Scientist", 5), listing("b", "ML Engineer", 9)],
+        COLUMNS,
+        read_user_cells(first),
+        NO_SCREENING,
     )
     assert second[1][header.index("Status")] == "Applied"
     assert second[2][header.index("Status")] == ""
-    assert second[-1][0] == "Friend's referral at Revolut"
+    assert second[-1][header.index("Title")] == "Friend's referral at Revolut"
     assert second[-1][header.index("Found by")] == "self"
 
 

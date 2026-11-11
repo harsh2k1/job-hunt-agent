@@ -329,6 +329,29 @@ class ScreeningSettings(StrictModel):
     senior_title_terms: list[str]
 
 
+class LlmSettings(StrictModel):
+    # registered LLM client; claude_cli runs the Claude Code CLI on the
+    # user's subscription (no API key)
+    backend: Literal["claude_cli"]
+    claude_cli_binary: str
+    timeout_seconds: int = Field(gt=0)
+
+
+class LlmScreeningSettings(StrictModel):
+    enabled: bool
+    # cheap model for every listing the rules keep; the stronger one only for
+    # the ones it can't decide ("check") that have an advert text to read
+    first_pass_model: str
+    second_pass_model: str
+    batch_size: int = Field(gt=0, le=50)
+    # advert text sent per listing; the start of an advert says the most
+    description_chars: int = Field(gt=0)
+    # a cap per run, to stay well inside the plan's usage limits
+    max_listings_per_run: int = Field(gt=0)
+    # the candidate's profile (gitignored); a change re-screens everything
+    profile_path: Path
+
+
 class GoogleSheetSettings(StrictModel):
     enabled: bool
     # the sheet shared with the service account as Editor (settings.local.yaml)
@@ -361,4 +384,6 @@ class Settings(StrictModel):
     portal_logins: PortalLoginsSettings
     source_health: SourceHealthSettings
     screening: ScreeningSettings
+    llm: LlmSettings
+    llm_screening: LlmScreeningSettings
     google_sheet: GoogleSheetSettings

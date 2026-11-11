@@ -1,22 +1,22 @@
 import json
-from datetime import timedelta
 
 import gspread
 
 from job_hunt.common.logger import get_logger
 from job_hunt.common.settings import settings as app_settings
-from job_hunt.common.settings_schema import GoogleSheetSettings, Settings
-from job_hunt.job_pipeline.listings import ListingBuilder
-from job_hunt.job_pipeline.rule_screening import RuleScreening
-from job_hunt.job_sources.location_matching import TargetLocationMatcher
+from job_hunt.common.settings_schema import Settings
+from job_hunt.job_pipeline.listings import Listing
+from job_hunt.job_pipeline.live_listings import rule_screened_live_listings
 from job_hunt.job_store.job_repository import JobRepository
-from job_hunt.job_store.models import utc_now
+from job_hunt.job_store.models import ListingScreening, utc_now
+from job_hunt.job_store.screening_repository import ScreeningRepository
 from job_hunt.job_store.sponsor_repository import SponsorRepository
 from job_hunt.sheet_sync.sheet_rows import (
     ScreenedListing,
     SponsorStatusLookup,
     build_jobs_rows,
     build_skipped_rows,
+    fit_of,
     jobs_columns,
     read_user_cells,
 )
@@ -29,51 +29,47 @@ class SheetSyncError(RuntimeError):
 
 
 class GoogleSheetSync:
-    """Rewrites the Jobs and Skipped tabs from the current listings,
-    keeping the user's Status, Notes and own rows. Values are written as
-    plain text (RAW), so nothing in an advert can become a formula."""
+    """Rewrites the Jobs and Skipped tabs from the current listings, keeping
+    the user's Status, Notes and own rows. Values are written as plain text
+    (RAW), so nothing in an advert can become a formula."""
 
     def __init__(
         self,
-        sheet_settings: GoogleSheetSettings,
-        listing_builder: ListingBuilder,
-        screening: RuleScreening,
+        settings: Settings,
         job_repository: JobRepository,
         sponsor_repository: SponsorRepository,
+        screening_repository: ScreeningRepository,
     ):
-        self._settings = sheet_settings
-        self._listing_builder = listing_builder
-        self._screening = screening
+        self._settings = settings
+        self._sheet_settings = settings.google_sheet
         self._job_repository = job_repository
         self._sponsor_repository = sponsor_repository
+        self._screening_repository = screening_repository
 
     @classmethod
     def from_settings(cls, settings: Settings = app_settings) -> "GoogleSheetSync":
-        return cls(
-            settings.google_sheet,
-            ListingBuilder(TargetLocationMatcher(settings.job_search.target_location_keywords)),
-            RuleScreening(settings.screening),
-            JobRepository(),
-            SponsorRepository(),
-        )
+        return cls(settings, JobRepository(), SponsorRepository(), ScreeningRepository())
 
     def sync(self) -> tuple[int, int]:
         spreadsheet = self._open_spreadsheet()
-        now = utc_now()
-        listings = self._listing_builder.build(
-            self._job_repository.list_jobs_seen_since(now - timedelta(days=self._settings.listing_days))
-        )
-        screened = [
-            ScreenedListing(listing, self._screening.screen(listing, now).reason) for listing in listings
-        ]
-        kept = [item.listing for item in screened if item.skip_reason is None]
-        skipped = [item for item in screened if item.skip_reason is not None]
+        live = rule_screened_live_listings(self._settings, self._job_repository, utc_now())
+        screenings = self._screening_repository.find(listing.key for listing in live.kept)
 
-        jobs_tab = self._worksheet(spreadsheet, self._settings.jobs_worksheet)
-        columns = jobs_columns(SponsorStatusLookup(self._sponsor_repository))
-        self._rewrite(jobs_tab, build_jobs_rows(kept, columns, read_user_cells(jobs_tab.get_all_values())))
+        def screening_of(listing: Listing) -> ListingScreening | None:
+            return screenings.get(listing.key)
+
+        llm_skipped = [listing for listing in live.kept if fit_of(screening_of(listing)) == "skip"]
+        kept = [listing for listing in live.kept if fit_of(screening_of(listing)) != "skip"]
+        skipped = [ScreenedListing(listing, reason) for listing, reason in live.skipped] + [
+            ScreenedListing(listing, f"LLM: {screenings[listing.key].reason}") for listing in llm_skipped
+        ]
+
+        jobs_tab = self._worksheet(spreadsheet, self._sheet_settings.jobs_worksheet)
+        columns = jobs_columns(SponsorStatusLookup(self._sponsor_repository), screening_of)
+        user_cells = read_user_cells(jobs_tab.get_all_values())
+        self._rewrite(jobs_tab, build_jobs_rows(kept, columns, user_cells, screening_of))
         self._rewrite(
-            self._worksheet(spreadsheet, self._settings.skipped_worksheet), build_skipped_rows(skipped)
+            self._worksheet(spreadsheet, self._sheet_settings.skipped_worksheet), build_skipped_rows(skipped)
         )
         logger.info("sheet: %d listings on Jobs, %d on Skipped", len(kept), len(skipped))
         return len(kept), len(skipped)
@@ -88,15 +84,15 @@ class GoogleSheetSync:
         worksheet.set_basic_filter()
 
     def _open_spreadsheet(self) -> gspread.Spreadsheet:
-        if self._settings.service_account is None or not self._settings.spreadsheet_url:
+        if self._sheet_settings.service_account is None or not self._sheet_settings.spreadsheet_url:
             raise SheetSyncError(
                 "set google_sheet.spreadsheet_url (settings.local.yaml) and the service account key"
             )
         client = gspread.service_account_from_dict(
-            json.loads(self._settings.service_account.get_secret_value())
+            json.loads(self._sheet_settings.service_account.get_secret_value())
         )
         try:
-            return client.open_by_url(self._settings.spreadsheet_url)
+            return client.open_by_url(self._sheet_settings.spreadsheet_url)
         except (gspread.SpreadsheetNotFound, gspread.exceptions.APIError) as error:
             raise SheetSyncError(
                 f"can't open the sheet (is it shared with the service account?): {error}"

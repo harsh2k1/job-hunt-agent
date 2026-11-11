@@ -12,6 +12,7 @@ from job_hunt.common.settings_schema import Settings
 from job_hunt.company_discovery.board_search import BoardSearchDiscovery
 from job_hunt.company_discovery.crawl_discovery import CrawlIndexDiscovery
 from job_hunt.job_pipeline.job_fetch_run import JobFetchRun
+from job_hunt.job_pipeline.screening_run import screen_live_listings
 from job_hunt.job_pipeline.source_health import HealthStatus, SourceHealthCheck
 from job_hunt.job_sources.job_source_factory import JobSourceFactory
 from job_hunt.job_store.sponsor_repository import SponsorRepository
@@ -114,6 +115,19 @@ class SourceHealthStep(DailyRunStep):
         )
 
 
+class LlmScreeningStep(DailyRunStep):
+    name = "LLM screening"
+
+    def __init__(self, settings: Settings):
+        self._settings = settings
+
+    def run(self) -> StepOutcome:
+        report = screen_live_listings(self._settings)
+        return StepOutcome(
+            self.name, not report.failed_batches and not report.stopped_by_usage_limit, report.summary()
+        )
+
+
 class SheetSyncStep(DailyRunStep):
     name = "Google Sheet"
 
@@ -144,6 +158,8 @@ class DailyRun:
         if include_discovery:
             steps += [WebSearchDiscoveryStep(settings), CommonCrawlDiscoveryStep(settings)]
         steps += [FetchJobsStep(settings), SourceHealthStep(settings)]
+        if settings.llm_screening.enabled:
+            steps.append(LlmScreeningStep(settings))
         if settings.google_sheet.enabled:
             steps.append(SheetSyncStep(settings))
         return cls(steps)

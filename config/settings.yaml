@@ -409,6 +409,24 @@ default:
       - architect
       - expert
 
+  llm:
+    backend: claude_cli
+    claude_cli_binary: claude
+    timeout_seconds: 600
+
+  # LLM screening of what the rule pass keeps. Each listing is screened once
+  # (the verdict is stored with a hash of the advert and the profile) and
+  # again only if either changes. Haiku first; Sonnet only for the ones
+  # Haiku marks "check" that have advert text.
+  llm_screening:
+    enabled: true
+    first_pass_model: haiku
+    second_pass_model: sonnet
+    batch_size: 20
+    description_chars: 1500
+    max_listings_per_run: 300
+    profile_path: "@format {this.REPO_ROOT}/config/candidate_profile.yaml"
+
   # The job list in a Google Sheet, rewritten after every run. Status and
   # Notes are yours: a sync keeps what's typed there. Share the sheet with
   # the service account (client_email in .secrets.yaml) as Editor and put
