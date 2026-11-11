@@ -63,6 +63,12 @@ class JobRepository:
             )
             return list(session.exec(statement).all())
 
+    # still being advertised: a source saw it on a recent run
+    def list_jobs_seen_since(self, since: datetime) -> list[StoredJob]:
+        with self._database.session_scope() as session:
+            statement = select(StoredJob).where(StoredJob.last_seen_at >= since)
+            return list(session.exec(statement).all())
+
     def count_jobs_by_source(self) -> dict[str, int]:
         with self._database.session_scope() as session:
             rows = session.exec(select(StoredJob.source, func.count()).group_by(StoredJob.source)).all()

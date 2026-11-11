@@ -361,6 +361,67 @@ default:
       board_recheck_after_hours: 720
       board_list_cache_ttl_hours: 2160
 
+  # Each source is judged against its own recent runs: a failed run, or a
+  # count far below its usual one, is flagged after every fetch.
+  source_health:
+    baseline_runs: 7
+    min_runs_for_baseline: 3
+    drop_warning_ratio: 0.3
+
+  # The rule pass over listings (no LLM). Skipped listings stay visible, with
+  # the reason, on the sheet's Skipped tab. Whole words, any case.
+  screening:
+    relevant_title_terms:
+      - data
+      - machine learning
+      - ml
+      - ai
+      - artificial intelligence
+      - deep learning
+      - nlp
+      - llm
+      - computer vision
+      - analytics
+      - analyst
+      - scientist
+      - research
+      - researcher
+      - quant
+      - quantitative
+      - statistician
+      - statistics
+      - insight
+      - insights
+      - mlops
+      - genai
+      - generative
+    senior_title_terms:
+      - senior
+      - sr
+      - lead
+      - principal
+      - staff
+      - head
+      - director
+      - manager
+      - vp
+      - chief
+      - architect
+      - expert
+
+  # The job list in a Google Sheet, rewritten after every run. Status and
+  # Notes are yours: a sync keeps what's typed there. Share the sheet with
+  # the service account (client_email in .secrets.yaml) as Editor and put
+  # its URL in settings.local.yaml.
+  google_sheet:
+    enabled: true
+    spreadsheet_url: null
+    jobs_worksheet: Jobs
+    skipped_worksheet: Skipped
+    listing_days: 14
+    # set in .secrets.yaml
+    service_account: null
+
   # Accounts for portals that need a login; the details go in
   # config/.secrets.yaml, never here.
   portal_logins:

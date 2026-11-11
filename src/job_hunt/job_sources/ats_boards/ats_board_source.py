@@ -39,6 +39,7 @@ class AtsBoardSource(JobSource[BoardPosting]):
     # companies; a new ATS is searched as soon as it has a reader
     search_domains: ClassVar[tuple[str, ...]]
     reads_tracked_companies = True
+    listing_rank = 10
 
     def __init_subclass__(cls, **kwargs: Any):
         super().__init_subclass__(**kwargs)

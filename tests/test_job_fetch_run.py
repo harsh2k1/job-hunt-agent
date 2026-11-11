@@ -6,6 +6,7 @@ from job_hunt.job_sources.job_source import JobSource
 from job_hunt.job_store.company_repository import CompanyRepository
 from job_hunt.job_store.job_repository import JobRepository
 from job_hunt.job_store.models import AtsPlatform, FetchedJob
+from job_hunt.job_store.source_run_repository import SourceRunRepository
 
 
 def make_job(source: str, job_id: str, employer_url: str | None = None, company: str = "Acme") -> FetchedJob:
@@ -41,7 +42,9 @@ class StaticSource(JobSource[FetchedJob]):
 
 
 def make_run(database, sources: list[JobSource]) -> JobFetchRun:
-    return JobFetchRun(sources, JobRepository(database), CompanyRepository(database))
+    return JobFetchRun(
+        sources, JobRepository(database), CompanyRepository(database), SourceRunRepository(database)
+    )
 
 
 def test_jobs_are_saved_and_counted_per_source(database):
@@ -80,3 +83,17 @@ def test_companies_linked_from_job_board_adverts_are_tracked_once(database):
         "perplexity",
     )
     assert company.discovered_via == "linked from indeed"
+
+
+def test_every_source_run_is_recorded_failures_included(database):
+    sources = [
+        StaticSource("indeed", [make_job("indeed", "1")]),
+        StaticSource("linkedin", [], error=RuntimeError("site changed its layout")),
+    ]
+    make_run(database, sources).run()
+
+    runs = SourceRunRepository(database)
+    [indeed_run] = runs.recent_runs("indeed", limit=5)
+    [linkedin_run] = runs.recent_runs("linkedin", limit=5)
+    assert (indeed_run.fetched_jobs, indeed_run.new_jobs, indeed_run.error) == (1, 1, None)
+    assert linkedin_run.error == "site changed its layout"

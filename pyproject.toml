@@ -23,6 +23,8 @@ dependencies = [
     # reading job alert emails from Gmail
     "google-api-python-client>=2.100",
     "google-auth-oauthlib>=1.0",
+    # writing the job list to a Google Sheet
+    "gspread>=6.0",
 ]
 
 [project.optional-dependencies]

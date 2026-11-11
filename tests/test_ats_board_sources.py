@@ -545,8 +545,48 @@ def test_workday_job_pages_are_read_once(database, cache):
     make_workday(database, cache, seen).fetch_jobs()
     make_workday(database, cache, seen).fetch_jobs()
     job_page_reads = [request for request in seen if "/job/" in request.url.path]
-    assert len(job_page_reads) == 2
+    assert len(job_page_reads) == 1
 
 
 def test_workday_board_check_reads_a_sample_of_jobs(database, cache):
     assert make_workday(database, cache).board_has_jobs_in_target_locations("jlp.wd3/jlpjobs_careers")
+
+
+def test_workday_site_naming_places_only_reads_target_place_jobs(database, cache):
+    # this site's addresses name countries, so its Dublin job is never downloaded
+    track(database, AtsPlatform.WORKDAY, "jlp.wd3/jlpjobs_careers", "John Lewis")
+    seen: list[httpx.Request] = []
+    make_workday(database, cache, seen).fetch_jobs()
+    assert [request.url.path for request in seen if "/job/" in request.url.path] == [
+        "/JLPjobs_careers/job/London/Data-Scientist_R-1"
+    ]
+
+
+def test_workday_board_check_needs_no_page_when_an_address_names_a_target_place(database, cache):
+    seen: list[httpx.Request] = []
+    assert make_workday(database, cache, seen).board_has_jobs_in_target_locations("jlp.wd3/jlpjobs_careers")
+    assert not [request for request in seen if "/job/" in request.url.path]
+
+
+def test_workday_site_naming_only_towns_has_every_job_read(database, cache):
+    towns_sitemap = WORKDAY_SITEMAP.replace("/job/London/", "/job/Bracknell/").replace(
+        "/job/Dublin/", "/job/Heathfield/"
+    )
+    routes = {
+        ("jlp.wd3.myworkdayjobs.com", "/jlpjobs_careers/siteMap.xml"): towns_sitemap,
+        ("jlp.wd3.myworkdayjobs.com", "/JLPjobs_careers/job/Bracknell/Data-Scientist_R-1"): workday_job_page(
+            "Data Scientist", "R-1", "Bracknell", "United Kingdom"
+        ),
+        ("jlp.wd3.myworkdayjobs.com", "/JLPjobs_careers/job/Heathfield/Analyst_R-2"): workday_job_page(
+            "Analyst", "R-2", "Heathfield", "United Kingdom"
+        ),
+    }
+    track(database, AtsPlatform.WORKDAY, "jlp.wd3/jlpjobs_careers", "John Lewis")
+    source = WorkdaySource(
+        settings.job_sources.workday,
+        TargetLocationMatcher(["london", "uk", "united kingdom"]),
+        make_http_client(routes),
+        CompanyRepository(database),
+        cache,
+    )
+    assert sorted(job.title for job in source.fetch_jobs()) == ["Analyst", "Data Scientist"]

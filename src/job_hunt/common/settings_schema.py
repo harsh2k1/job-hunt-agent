@@ -1,7 +1,9 @@
+import json
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, SecretStr
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator
 
 
 # The shape of config/settings.yaml. No defaults here: the YAML is the one place
@@ -300,6 +302,15 @@ class CompanySeedSettings(StrictModel):
     seed_list_path: Path
 
 
+class SourceHealthSettings(StrictModel):
+    # a source's usual count is the median of this many earlier good runs
+    baseline_runs: int = Field(ge=1)
+    # judged only once it has this many
+    min_runs_for_baseline: int = Field(ge=1)
+    # below this share of the usual count is a warning
+    drop_warning_ratio: float = Field(gt=0, lt=1)
+
+
 class PortalLogin(StrictModel):
     username: str = Field(min_length=1)
     password: SecretStr
@@ -309,6 +320,32 @@ class PortalLoginsSettings(StrictModel):
     # King's single sign-on (Microsoft), used by Target Connect; set in
     # config/.secrets.yaml, null until then
     kcl: PortalLogin | None
+
+
+class ScreeningSettings(StrictModel):
+    # a listing is kept only if its title has one of these (whole words)
+    relevant_title_terms: list[str] = Field(min_length=1)
+    # and none of these: roles that want years of experience
+    senior_title_terms: list[str]
+
+
+class GoogleSheetSettings(StrictModel):
+    enabled: bool
+    # the sheet shared with the service account as Editor (settings.local.yaml)
+    spreadsheet_url: str | None
+    # tab names: kept listings, and the ones screened out with the reason
+    jobs_worksheet: str = Field(min_length=1)
+    skipped_worksheet: str = Field(min_length=1)
+    # listings seen by a source within this many days
+    listing_days: int = Field(gt=0)
+    # the service account's JSON key, from .secrets.yaml; held as a secret so
+    # it never shows in show-settings or an error
+    service_account: SecretStr | None
+
+    @field_validator("service_account", mode="before")
+    @classmethod
+    def key_as_json(cls, value: Any) -> Any:
+        return json.dumps(dict(value)) if isinstance(value, Mapping) else value
 
 
 class Settings(StrictModel):
@@ -322,3 +359,6 @@ class Settings(StrictModel):
     companies: CompanySeedSettings
     company_discovery: CompanyDiscoverySettings
     portal_logins: PortalLoginsSettings
+    source_health: SourceHealthSettings
+    screening: ScreeningSettings
+    google_sheet: GoogleSheetSettings

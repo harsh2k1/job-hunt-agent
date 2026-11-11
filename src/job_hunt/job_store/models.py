@@ -144,3 +144,24 @@ class LicensedSponsor(SQLModel, table=True):
     route: str
     # the date of the register file this came from
     register_date: date
+
+
+class SourceRun(SQLModel, table=True):
+    """One source's part in one fetch, kept to spot a source that breaks or
+    quietly starts returning far fewer jobs than usual."""
+
+    __tablename__ = "source_runs"
+
+    id: int | None = Field(default=None, primary_key=True)
+    source: str = Field(index=True)
+    started_at: datetime
+    finished_at: datetime
+    fetched_jobs: int = 0
+    new_jobs: int = 0
+    # None when the source ran to the end
+    error: str | None = Field(default=None, sa_type=Text)
+
+    @field_validator("started_at", "finished_at")
+    @classmethod
+    def store_times_as_utc(cls, value: datetime) -> datetime:
+        return to_utc(value)

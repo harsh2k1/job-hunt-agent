@@ -35,6 +35,15 @@ class CrawlDiscoveryReport:
     # boards with target-location jobs; added unless it was a dry run
     new_companies: list[DiscoveredCompany] = field(default_factory=list)
 
+    def summary(self) -> str:
+        return (
+            f"{', '.join(self.crawl_ids)}: {self.boards_in_crawls} boards, "
+            f"{self.already_tracked} tracked already, {self.recently_checked} checked recently, "
+            f"{self.boards_checked} checked now "
+            f"({self.failed_checks} failed), {self.deferred_checks} left for the next run; "
+            f"{len(self.new_companies)} with jobs in target locations"
+        )
+
 
 class CrawlIndexDiscovery:
     """Finds company boards in Common Crawl's URL index: every crawled page on

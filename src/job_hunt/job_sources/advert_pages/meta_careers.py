@@ -10,6 +10,7 @@ class MetaCareersSource(SitemapAdvertPageSource):
     location check keeps the UK ones."""
 
     name = "meta_careers"
+    listing_rank = 20
     sitemap_url = "https://www.metacareers.com/jobsearch/sitemap.xml"
 
     def _is_advert_url(self, url: str) -> bool:

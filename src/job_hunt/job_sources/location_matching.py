@@ -21,6 +21,15 @@ class TargetLocationMatcher:
     def matches(self, location: str) -> bool:
         return self._pattern.search(location) is not None
 
+    # the first target place named, lower case: "Greater London (Hybrid)" -> "london"
+    def first_match(self, text: str) -> str | None:
+        match = self._pattern.search(text)
+        return match.group(1).lower() if match else None
+
+    # "Data Scientist - London" -> "Data Scientist - "
+    def remove_from(self, text: str) -> str:
+        return self._pattern.sub(" ", text)
+
     # A posting with no location at all is kept: it can't be ruled out, and
     # anything unclear goes to a person rather than being dropped.
     def matches_any(self, locations: Iterable[str | None]) -> bool:

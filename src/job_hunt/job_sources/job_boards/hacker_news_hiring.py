@@ -40,6 +40,7 @@ class HackerNewsHiringSource(JobSource[HackerNewsComment]):
     """
 
     name = "hacker_news_hiring"
+    listing_rank = 80
 
     def __init__(
         self,

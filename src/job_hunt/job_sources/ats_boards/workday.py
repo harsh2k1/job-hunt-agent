@@ -80,7 +80,7 @@ class WorkdaySource(AtsBoardSource):
         return f"{tenant}/{segments[0]}"
 
     def _fetch_board_postings(self, board_slug: str) -> list[dict[str, Any]]:
-        links = self._job_page_links(board_slug)
+        links = self._links_worth_reading(self._job_page_links(board_slug))
         batch = self._page_reader.read_pages(links, self._source_settings.max_page_downloads_per_board)
         return [{"advert_page": page} for page in batch.pages]
 
@@ -89,13 +89,28 @@ class WorkdaySource(AtsBoardSource):
         sitemap = read_sitemap(self._http_client.get_text(SITEMAP_URL.format(tenant=tenant, site=site)))
         return [AdvertPageLink(entry.url) for entry in sitemap if "/job/" in entry.url]
 
+    # Job addresses carry the place: /job/UK---London/... or /job/Bracknell/...
+    # A site whose addresses name target places at all labels every job that
+    # way, so only those are read (a global employer's US jobs cost nothing).
+    # A site that names none uses town names only (UK retailers), so all of
+    # its jobs are read, within the cap.
+    def _links_worth_reading(self, links: list[AdvertPageLink]) -> list[AdvertPageLink]:
+        in_target_places = [link for link in links if self._names_target_place(link)]
+        return in_target_places or links
+
+    def _names_target_place(self, link: AdvertPageLink) -> bool:
+        return self._location_matcher.matches(job_place_segment(link.url).replace("-", " "))
+
     def _posting_locations(self, posting: dict[str, Any]) -> list[str | None]:
         return list(read_locations(posting["advert_page"].job_posting))
 
-    # A sample spread across the sitemap, not every page: big employers list
-    # thousands of jobs worldwide, and this only decides whether to track them.
+    # Whether a newly found board is worth tracking: a target place in any
+    # job address settles it with no page read; otherwise a small sample of
+    # pages spread across the sitemap is read.
     def board_has_jobs_in_target_locations(self, board_slug: str) -> bool:
         links = self._job_page_links(board_slug)
+        if any(self._names_target_place(link) for link in links):
+            return True
         sample_size = self._source_settings.board_check_sample_pages
         step = max(1, len(links) // sample_size)
         batch = self._page_reader.read_pages(links[::step][:sample_size], max_downloads=sample_size)
@@ -115,3 +130,9 @@ class WorkdaySource(AtsBoardSource):
             page,
             company_name=raw_posting.company.name,
         )
+
+
+# ".../Depop_Careers/job/London-UK/Backend-Engineer_JR6055" -> "London-UK"
+def job_place_segment(url: str) -> str:
+    _, _, after_job = url.partition("/job/")
+    return after_job.split("/", 1)[0]

@@ -1,3 +1,4 @@
+from job_hunt.common.registry import UnknownRegistryEntryError
 from job_hunt.common.settings import settings as app_settings
 from job_hunt.common.settings_schema import Settings
 
@@ -9,6 +10,8 @@ import job_hunt.job_sources.job_boards  # noqa: F401  # isort: skip
 import job_hunt.job_sources.portals  # noqa: F401  # isort: skip
 from job_hunt.job_sources.job_source import JobSource, job_source_registry
 
+UNRANKED_LISTING = 99
+
 
 class JobSourceFactory:
     """Builds job sources by name, configured from settings."""
@@ -16,6 +19,15 @@ class JobSourceFactory:
     @staticmethod
     def create(source_name: str, settings: Settings = app_settings) -> JobSource:
         return job_source_registry.get(source_name).from_settings(settings)
+
+    # rank used to pick which source's copy of an advert to show; sources no
+    # longer registered (renamed or removed) come last
+    @staticmethod
+    def listing_rank(source_name: str) -> int:
+        try:
+            return job_source_registry.get(source_name).listing_rank
+        except UnknownRegistryEntryError:
+            return UNRANKED_LISTING
 
     @staticmethod
     def is_enabled(source_name: str, settings: Settings = app_settings) -> bool:

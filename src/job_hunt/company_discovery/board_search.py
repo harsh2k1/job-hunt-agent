@@ -39,6 +39,13 @@ class BoardSearchReport:
     # boards not tracked before; added unless it was a dry run
     new_companies: list[DiscoveredCompany] = field(default_factory=list)
 
+    def summary(self) -> str:
+        return (
+            f"{self.queries} queries, {self.cached_queries} from cache, {self.searches_run} searched "
+            f"({self.failed_queries} failed), {self.deferred_queries} left for the next run; "
+            f"{len(self.boards_found)} boards found, {len(self.new_companies)} new"
+        )
+
 
 # One query per ATS domain, role phrase and place, e.g.
 # "site:jobs.ashbyhq.com data scientist London". Kept to plain words: quoted

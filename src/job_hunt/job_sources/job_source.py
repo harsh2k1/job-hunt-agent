@@ -39,6 +39,12 @@ class JobSource(ABC, Generic[RawPostingT]):
     # Sources that read the tracked-company list run after the ones that add
     # to it, so a company found on a job board is read in the same run.
     reads_tracked_companies: ClassVar[bool] = False
+    # When several sources list the same advert, the lowest rank is shown:
+    # the more direct the source, the more complete and current its copy.
+    # 10 company ATS boards, 20 big employers' careers sites, 30 advert-page
+    # sites, 40 student portals, 50 job boards, 60 Google Jobs, 70 alert
+    # emails, 80 forum threads.
+    listing_rank: ClassVar[int] = 50
 
     @classmethod
     @abstractmethod

@@ -70,6 +70,7 @@ class SeedCompaniesCommand(CliCommand):
 
 
 WEB_SEARCH = "web-search"
+DRY_RUN_NOTE = " (dry run: nothing added)"
 COMMON_CRAWL = "common-crawl"
 
 
@@ -91,44 +92,33 @@ class DiscoverCompaniesCommand(CliCommand):
     # stop the crawl and the other way round. Exit 1 if either failed.
     def run(self, args: argparse.Namespace) -> int:
         ways = args.via or [WEB_SEARCH, COMMON_CRAWL]
-        verb = "would be added" if args.dry_run else "added"
         succeeded = True
         if WEB_SEARCH in ways:
-            succeeded &= self._run_web_search(args.dry_run, verb)
+            succeeded &= self._run_web_search(args.dry_run)
         if COMMON_CRAWL in ways:
-            succeeded &= self._run_common_crawl(args.dry_run, verb)
+            succeeded &= self._run_common_crawl(args.dry_run)
         return EXIT_SUCCESS if succeeded else EXIT_FAILURE
 
     @staticmethod
-    def _run_web_search(dry_run: bool, verb: str) -> bool:
+    def _run_web_search(dry_run: bool) -> bool:
         try:
             report = BoardSearchDiscovery.from_settings().run(dry_run=dry_run)
         except BoardSearchError as error:
             print(f"Web search: failed: {error}")
             return False
         print_new_companies(report.new_companies)
-        print(
-            f"Web search: {report.queries} queries, {report.cached_queries} from cache, "
-            f"{report.searches_run} searched ({report.failed_queries} failed), "
-            f"{report.deferred_queries} left for the next run. "
-            f"{len(report.boards_found)} boards found, {len(report.new_companies)} new {verb}."
-        )
+        print(f"Web search: {report.summary()}{DRY_RUN_NOTE if dry_run else ''}.")
         return True
 
     @staticmethod
-    def _run_common_crawl(dry_run: bool, verb: str) -> bool:
+    def _run_common_crawl(dry_run: bool) -> bool:
         try:
             report = CrawlIndexDiscovery.from_settings().run(dry_run=dry_run)
         except HttpRequestError as error:
             print(f"Common Crawl: failed: {error}")
             return False
         print_new_companies(report.new_companies)
-        print(
-            f"Common Crawl ({', '.join(report.crawl_ids)}): {report.boards_in_crawls} boards, "
-            f"{report.already_tracked} tracked already, {report.recently_checked} checked recently, "
-            f"{report.boards_checked} checked now ({report.failed_checks} failed), {report.deferred_checks} "
-            f"left for the next run. {len(report.new_companies)} with UK jobs {verb}."
-        )
+        print(f"Common Crawl {report.summary()}{DRY_RUN_NOTE if dry_run else ''}.")
         return True
 
 

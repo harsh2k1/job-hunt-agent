@@ -30,6 +30,8 @@ class AdvertPageSource(JobSource[AdvertPage]):
     are shared. Only pages the site's robots.txt allows are read.
     """
 
+    listing_rank = 30
+
     def __init__(
         self,
         search_settings: JobSearchSettings,

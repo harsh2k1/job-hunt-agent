@@ -47,6 +47,7 @@ ruff check src tests migrations && ruff format --check src tests migrations
 ## Usage
 
 ```bash
+job-hunt run                              # the daily run: sponsor register, discovery, every source, health
 job-hunt migrate-db                       # bring the database schema up to date (safe to rerun)
 job-hunt seed-companies                   # load config/seed_companies.yaml (safe to rerun)
 job-hunt add-company --name Perplexity --board-url https://jobs.ashbyhq.com/perplexity
@@ -58,6 +59,8 @@ job-hunt list-sources                     # every source, enabled or not
 job-hunt fetch                            # every enabled source
 job-hunt fetch --source indeed --source ashby   # just these (even if disabled)
 job-hunt job-counts                       # jobs found so far, per source
+job-hunt listings                         # live adverts, one per advert across sources
+job-hunt source-health                    # each source's last run against its usual count
 job-hunt update-sponsor-register          # load the latest Home Office sponsor register (daily is fine)
 job-hunt check-sponsor "Monzo"            # is this employer a licensed sponsor?
 job-hunt show-settings                    # the settings this run would use
@@ -106,7 +109,8 @@ job_sources/ats_boards/  Greenhouse, Lever, Ashby, Workable, SmartRecruiters; bo
 job_sources/advert_pages/ AdvertPageSource (JobPosting markup); The Intake, Student Circus, jobs.ac.uk
 job_sources/email_alerts/ Gmail reader and the job links it recognises
 job_sources/portals/     logged-in portals in a saved browser profile; KCL Target Connect
-job_pipeline/            JobFetchRun: runs sources, saves jobs, adds linked companies
+job_pipeline/            JobFetchRun (sources -> saved jobs), DailyRun (the daily steps),
+                         listings (one per advert across sources), source health
 sponsor_register/        finds and reads the Home Office register of licensed sponsors
 company_discovery/       seed list; board search (web search); crawl discovery (Common Crawl)
 company_discovery/common_crawl/  reads Common Crawl's URL index files by byte range

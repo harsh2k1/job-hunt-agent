@@ -3,11 +3,8 @@ import argparse
 from job_hunt.cli.cli_command import EXIT_FAILURE, EXIT_SUCCESS, CliCommand, register_cli_command
 from job_hunt.common.http_client import HttpRequestError, get_http_client
 from job_hunt.job_store.sponsor_repository import SponsorRepository
-from job_hunt.sponsor_register.register_file import (
-    RegisterNotFoundError,
-    find_current_register,
-    read_register,
-)
+from job_hunt.sponsor_register.register_file import RegisterNotFoundError
+from job_hunt.sponsor_register.register_update import update_sponsor_register
 
 
 @register_cli_command
@@ -21,19 +18,15 @@ class UpdateSponsorRegisterCommand(CliCommand):
         )
 
     def run(self, args: argparse.Namespace) -> int:
-        http_client = get_http_client()
-        repository = SponsorRepository()
         try:
-            register = find_current_register(http_client)
-            if register.register_date == repository.register_date() and not args.force:
-                print(f"The register of {register.register_date} is already loaded.")
-                return EXIT_SUCCESS
-            sponsors = read_register(http_client.get_text(register.url), register.register_date)
+            update = update_sponsor_register(get_http_client(), SponsorRepository(), force=args.force)
         except (HttpRequestError, RegisterNotFoundError) as error:
             print(f"Couldn't get the register: {error}")
             return EXIT_FAILURE
-        loaded = repository.replace_register(sponsors)
-        print(f"Loaded {loaded} entries from the register of {register.register_date}.")
+        if update.entries_loaded is None:
+            print(f"The register of {update.register_date} is already loaded.")
+        else:
+            print(f"Loaded {update.entries_loaded} entries from the register of {update.register_date}.")
         return EXIT_SUCCESS
 
 

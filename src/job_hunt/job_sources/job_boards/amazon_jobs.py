@@ -19,6 +19,7 @@ class AmazonJobsSource(SearchApiSource):
     term per place, limited to the configured country."""
 
     name = "amazon_jobs"
+    listing_rank = 20
     _source_settings: AmazonJobsSourceSettings
 
     def _check_credentials(self) -> None:

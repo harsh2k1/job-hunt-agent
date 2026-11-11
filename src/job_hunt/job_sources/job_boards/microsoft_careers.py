@@ -18,6 +18,7 @@ class MicrosoftCareersSource(SearchApiSource):
     pages of ten (the API's fixed page size). No key needed."""
 
     name = "microsoft_careers"
+    listing_rank = 20
 
     def _check_credentials(self) -> None:
         # a public search; nothing to check

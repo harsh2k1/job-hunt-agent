@@ -7,7 +7,8 @@ from job_hunt.job_sources.ats_boards.ats_board_links import AtsBoardLink, find_a
 from job_hunt.job_sources.job_source import JobSource
 from job_hunt.job_store.company_repository import CompanyRepository
 from job_hunt.job_store.job_repository import JobRepository
-from job_hunt.job_store.models import DiscoveredCompany, FetchedJob
+from job_hunt.job_store.models import DiscoveredCompany, FetchedJob, SourceRun, utc_now
+from job_hunt.job_store.source_run_repository import SourceRunRepository
 
 logger = get_logger(__name__)
 
@@ -35,13 +36,32 @@ class JobFetchRun:
         sources: list[JobSource],
         job_repository: JobRepository | None = None,
         company_repository: CompanyRepository | None = None,
+        run_repository: SourceRunRepository | None = None,
     ):
         self._sources = sources
         self._job_repository = job_repository or JobRepository()
         self._company_repository = company_repository or CompanyRepository()
+        self._run_repository = run_repository or SourceRunRepository()
 
+    # every source's result is recorded, failures included, so its health
+    # can be judged against its own history
     def run(self) -> list[SourceFetchReport]:
-        return [self._fetch_from(source) for source in self._sources]
+        reports = []
+        for source in self._sources:
+            started_at = utc_now()
+            report = self._fetch_from(source)
+            self._run_repository.record(
+                SourceRun(
+                    source=source.name,
+                    started_at=started_at,
+                    finished_at=utc_now(),
+                    fetched_jobs=report.fetched_jobs,
+                    new_jobs=report.new_jobs,
+                    error=report.error,
+                )
+            )
+            reports.append(report)
+        return reports
 
     def _fetch_from(self, source: JobSource) -> SourceFetchReport:
         logger.info("%s: fetching", source.name)
