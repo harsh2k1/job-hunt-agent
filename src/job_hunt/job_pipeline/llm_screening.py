@@ -19,6 +19,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from job_hunt.common.logger import get_logger
 from job_hunt.common.settings_schema import LlmScreeningSettings
+from job_hunt.job_pipeline.advert_facts import advert_digest, sponsorship_in_advert
 from job_hunt.job_pipeline.listings import Listing
 from job_hunt.job_store.models import ListingScreening, utc_now
 from job_hunt.job_store.screening_repository import ScreeningRepository
@@ -27,6 +28,8 @@ from job_hunt.llm.llm_client import LlmClient, LlmError, LlmUsageLimitError
 logger = get_logger(__name__)
 
 Fit = Literal["strong", "good", "check", "skip"]
+# part of every content hash: a change to what's sent re-screens everything
+PROMPT_VERSION = "2"
 UNDECIDED: Fit = "check"
 
 SYSTEM_PROMPT = (
@@ -40,8 +43,9 @@ SYSTEM_PROMPT = (
     "profile's availability (e.g. a full-time experienced-hire role that starts now, when the candidate can "
     "only work part-time until a later date). When unsure, choose check or good, never skip: a wrongly "
     "skipped job is lost, a wrongly kept one costs a glance.\n"
-    "sponsorship: 'offered' or 'not offered' only if the text says so, else 'not stated'. It's reported, "
-    "not a reason to skip unless the profile says sponsorship is needed.\n"
+    "sponsorship: 'offered' or 'not offered' only if the text says so, else 'not stated'; when "
+    "sponsorship_in_text is given, that is what the advert says. It's reported, not a reason to skip unless "
+    "the profile says sponsorship is needed.\n"
     "reason: one short phrase the candidate can act on."
 )
 
@@ -140,17 +144,18 @@ class LlmScreening:
     def _is_due(self, listing: Listing, stored: ListingScreening | None) -> bool:
         return stored is None or stored.content_hash != self._content_hash(listing)
 
+    def _advert(self, listing: Listing) -> str | None:
+        return advert_digest(
+            listing.primary.description,
+            self._settings.advert_opening_chars,
+            self._settings.advert_key_fact_chars,
+        )
+
+    # what was sent: a different advert, profile or prompt means a new hash
     def _content_hash(self, listing: Listing) -> str:
         job = listing.primary
-        content = "|".join(
-            [
-                job.title,
-                job.company_name,
-                job.location or "",
-                (job.description or "")[: self._settings.description_chars],
-            ]
-        )
-        return hashlib.sha1(f"{self._profile_hash}|{content}".encode()).hexdigest()
+        content = "|".join([job.title, job.company_name, job.location or "", self._advert(listing) or ""])
+        return hashlib.sha1(f"{self._profile_hash}|{PROMPT_VERSION}|{content}".encode()).hexdigest()
 
     # adds listing key -> (verdict, model) to verdicts; a failed batch is
     # skipped and its listings stay due for the next run
@@ -189,7 +194,9 @@ class LlmScreening:
                     "type": listing.primary.employment_type,
                     "salary": listing.primary.salary_text,
                     "closes": listing.closes_at.date().isoformat() if listing.closes_at else None,
-                    "advert": (listing.primary.description or "")[: self._settings.description_chars] or None,
+                    "advert": self._advert(listing),
+                    # read from the whole advert by rule; null when it doesn't say
+                    "sponsorship_in_text": sponsorship_in_advert(listing.primary.description),
                 },
                 ensure_ascii=False,
             )
@@ -206,7 +213,8 @@ class LlmScreening:
                 content_hash=self._content_hash(listing),
                 fit=verdict.fit,
                 reason=verdict.reason,
-                sponsorship=verdict.sponsorship,
+                # the rule reads the whole advert, so where it finds an answer it wins
+                sponsorship=sponsorship_in_advert(listing.primary.description) or verdict.sponsorship,
                 start_date=verdict.start_date,
                 experience_years=verdict.experience_years,
                 model=model,

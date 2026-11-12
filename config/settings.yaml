@@ -430,7 +430,8 @@ default:
     first_pass_model: haiku
     second_pass_model: sonnet
     batch_size: 20
-    description_chars: 1500
+    advert_opening_chars: 1200
+    advert_key_fact_chars: 1500
     max_listings_per_run: 300
     profile_path: "@format {this.REPO_ROOT}/config/candidate_profile.yaml"
 

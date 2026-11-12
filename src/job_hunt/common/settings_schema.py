@@ -344,8 +344,11 @@ class LlmScreeningSettings(StrictModel):
     first_pass_model: str
     second_pass_model: str
     batch_size: int = Field(gt=0, le=50)
-    # advert text sent per listing; the start of an advert says the most
-    description_chars: int = Field(gt=0)
+    # what the LLM reads of an advert: its opening, plus every line from
+    # anywhere in it about visas, start dates, experience and hours, so the
+    # deciding lines are never cut off
+    advert_opening_chars: int = Field(gt=0)
+    advert_key_fact_chars: int = Field(gt=0)
     # a cap per run, to stay well inside the plan's usage limits
     max_listings_per_run: int = Field(gt=0)
     # the candidate's profile (gitignored); a change re-screens everything

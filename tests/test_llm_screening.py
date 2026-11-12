@@ -121,3 +121,29 @@ def test_each_batch_is_stored_as_soon_as_it_is_answered(database):
         [listing(str(n), "Data Scientist") for n in range(4)]
     )
     assert set(ScreeningRepository(database).find(["0", "1", "2", "3"])) == {"0", "1"}
+
+
+def test_sponsorship_read_by_rule_from_the_whole_advert_overrides_the_model(database):
+    # the line is far past what the model reads of the opening; the model says "not stated"
+    advert = (
+        "A data science graduate scheme. "
+        + "Details about the team. " * 400
+        + "Note: we cannot sponsor visas."
+    )
+    llm = FakeLlm()
+    make_screening(database, llm).screen([listing("a", "Data Scientist", advert)])
+    assert ScreeningRepository(database).find(["a"])["a"].sponsorship == "not offered"
+
+
+def test_the_model_is_told_what_the_rule_found(database):
+    prompts: list[str] = []
+
+    class RecordingLlm(FakeLlm):
+        def ask(self, prompt, reply_schema, system_prompt, model):
+            prompts.append(prompt)
+            return super().ask(prompt, reply_schema, system_prompt, model)
+
+    make_screening(database, RecordingLlm()).screen(
+        [listing("a", "Data Scientist", "Graduate role. Visa sponsorship is available for this role.")]
+    )
+    assert '"sponsorship_in_text": "offered"' in prompts[0]
