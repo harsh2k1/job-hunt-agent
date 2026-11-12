@@ -113,3 +113,11 @@ def test_a_failed_batch_leaves_its_listings_due(database):
     report = make_screening(database, FakeLlm(fail_models={"haiku"})).screen([listing("a", "Data Scientist")])
     assert (report.failed_batches, report.screened) == (1, 0)
     assert ScreeningRepository(database).find(["a"]) == {}
+
+
+def test_each_batch_is_stored_as_soon_as_it_is_answered(database):
+    # the second call hits the limit; the first batch is already stored
+    make_screening(database, FakeLlm(usage_limit_after=1)).screen(
+        [listing(str(n), "Data Scientist") for n in range(4)]
+    )
+    assert set(ScreeningRepository(database).find(["0", "1", "2", "3"])) == {"0", "1"}

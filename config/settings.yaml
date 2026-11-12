@@ -395,6 +395,13 @@ default:
       - mlops
       - genai
       - generative
+      - fraud
+      - aml
+      - kyc
+      - financial crime
+      - risk modelling
+    # Experienced-hire titles: full-time roles that start now, which the
+    # candidate can't take until September 2027 (see the profile).
     senior_title_terms:
       - senior
       - sr

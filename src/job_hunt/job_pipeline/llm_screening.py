@@ -30,14 +30,18 @@ Fit = Literal["strong", "good", "check", "skip"]
 UNDECIDED: Fit = "check"
 
 SYSTEM_PROMPT = (
-    "You screen UK job listings for one candidate, inside an automated pipeline. Judge each listing only "
-    "on its text; never invent facts. Be brief.\n"
-    "fit: strong = a data science / machine learning / AI role at graduate, entry, junior or intern level "
-    "that suits the candidate's timing; good = suitable but second-choice (an adjacent data role, or "
-    "unclear level or timing); check = the text is too thin to judge; skip = clearly unsuitable (wants "
-    "about 3+ years' experience, a different field, no visa sponsorship, a full-time start before the "
-    "candidate is free, or not in the UK).\n"
-    "sponsorship: 'offered' or 'not offered' only if the text says so, else 'not stated'.\n"
+    "You screen UK job listings for one candidate, inside an automated pipeline. Judge each listing "
+    "against the candidate's profile only (experience, availability, right to work) and only on its text; "
+    "never invent facts. Be brief.\n"
+    "fit: strong = a role the profile wants, at a level the candidate's experience matches; good = "
+    "suitable but second choice (an adjacent data role, or a level or timing to confirm); check = can't "
+    "tell from the text, or there's a concern to confirm (e.g. a full-time start before the candidate is "
+    "free); skip = clearly unsuitable: a different field, not in the UK or remote-UK, or ruled out by the "
+    "profile's availability (e.g. a full-time experienced-hire role that starts now, when the candidate can "
+    "only work part-time until a later date). When unsure, choose check or good, never skip: a wrongly "
+    "skipped job is lost, a wrongly kept one costs a glance.\n"
+    "sponsorship: 'offered' or 'not offered' only if the text says so, else 'not stated'. It's reported, "
+    "not a reason to skip unless the profile says sponsorship is needed.\n"
     "reason: one short phrase the candidate can act on."
 )
 
@@ -128,7 +132,9 @@ class LlmScreening:
         except LlmUsageLimitError as error:
             logger.warning("LLM screening stopped: %s", error)
             report.stopped_by_usage_limit = True
-        self._save(batch_listings, verdicts, report)
+        report.screened = len(verdicts)
+        for verdict, _ in verdicts.values():
+            report.fits[verdict.fit] = report.fits.get(verdict.fit, 0) + 1
         return report
 
     def _is_due(self, listing: Listing, stored: ListingScreening | None) -> bool:
@@ -165,9 +171,12 @@ class LlmScreening:
                 report.failed_batches += 1
                 logger.warning("LLM screening batch failed on %s: %s", model, error)
                 continue
-            for verdict in reply.verdicts:
-                if verdict.id in by_id:
-                    verdicts[by_id[verdict.id].key] = (verdict, model)
+            answered = {
+                by_id[verdict.id].key: (verdict, model) for verdict in reply.verdicts if verdict.id in by_id
+            }
+            # stored straight away, so an interrupted run keeps what it paid for
+            self._repository.save(self._screenings(batch, answered))
+            verdicts.update(answered)
 
     def _prompt(self, by_id: dict[str, Listing]) -> str:
         lines = [
@@ -188,33 +197,25 @@ class LlmScreening:
         ]
         return f"Candidate:\n{self._profile}\n\nListings (one JSON object per line):\n" + "\n".join(lines)
 
-    def _save(
-        self,
-        listings: list[Listing],
-        verdicts: dict[str, tuple[ListingVerdict, str]],
-        report: ScreeningRunReport,
-    ) -> None:
-        screenings = []
-        for listing in listings:
-            if listing.key not in verdicts:
-                continue
-            verdict, model = verdicts[listing.key]
-            screenings.append(
-                ListingScreening(
-                    listing_key=listing.key,
-                    content_hash=self._content_hash(listing),
-                    fit=verdict.fit,
-                    reason=verdict.reason,
-                    sponsorship=verdict.sponsorship,
-                    start_date=verdict.start_date,
-                    experience_years=verdict.experience_years,
-                    model=model,
-                    screened_at=utc_now(),
-                )
+    def _screenings(
+        self, listings: list[Listing], verdicts: dict[str, tuple[ListingVerdict, str]]
+    ) -> list[ListingScreening]:
+        return [
+            ListingScreening(
+                listing_key=listing.key,
+                content_hash=self._content_hash(listing),
+                fit=verdict.fit,
+                reason=verdict.reason,
+                sponsorship=verdict.sponsorship,
+                start_date=verdict.start_date,
+                experience_years=verdict.experience_years,
+                model=model,
+                screened_at=utc_now(),
             )
-            report.fits[verdict.fit] = report.fits.get(verdict.fit, 0) + 1
-        report.screened = len(screenings)
-        self._repository.save(screenings)
+            for listing in listings
+            if listing.key in verdicts
+            for verdict, model in [verdicts[listing.key]]
+        ]
 
 
 def _chunks(listings: list[Listing], size: int) -> Iterator[list[Listing]]:
