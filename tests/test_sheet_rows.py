@@ -36,7 +36,7 @@ def test_jobs_tab_has_numbered_rows_in_a_fixed_column_order():
         [listing("a", "No deadline"), listing("b", "Closes later", 20), listing("c", "Closes soon", 3)]
     )
     header = rows[0]
-    assert header[:5] == ["#", "Fit", "Role", "Company", "Location"]
+    assert header[:8] == ["#", "Role", "Company", "Advert link", "JD", "Location", "Closes", "Start"]
     assert header[-1] == KEY_COLUMN
     assert [row[0] for row in rows[1:]] == ["1", "2", "3"]
     assert [row[header.index("Role")] for row in rows[1:]] == ["Closes soon", "Closes later", "No deadline"]
@@ -69,8 +69,8 @@ def test_the_users_cells_and_own_rows_survive_even_a_new_column_order():
 
 def test_skipped_rows_are_numbered_and_carry_the_reason():
     rows = build_skipped_rows([ScreenedListing(listing("a", "Barista"), "title isn't a data / AI role")])
-    assert rows[0][:3] == ["#", "Skip reason", "Role"]
-    assert rows[1][:3] == ["1", "title isn't a data / AI role", "Barista"]
+    assert rows[0][:5] == ["#", "Role", "Company", "Advert link", "Skip reason"]
+    assert rows[1][4] == "title isn't a data / AI role"
 
 
 def test_rule_screening_keeps_data_roles_and_says_why_others_go():

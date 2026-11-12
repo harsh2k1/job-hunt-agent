@@ -7,7 +7,7 @@ from typing import Any
 
 import gspread
 
-from job_hunt.sheet_sync.sheet_rows import KEY_COLUMN, STATUS_CHOICES, SheetColumn
+from job_hunt.sheet_sync.sheet_rows import KEY_COLUMN, LINK_COLUMN, STATUS_CHOICES, SheetColumn
 
 HEADER_BACKGROUND = {"red": 0.17, "green": 0.24, "blue": 0.36}
 WHITE = {"red": 1, "green": 1, "blue": 1}
@@ -21,7 +21,7 @@ FIT_COLOURS = {
 }
 HEADER_ROW_PIXELS = 34
 BODY_ROW_PIXELS = 24
-# up to and including Role: the row number, its fit and what it is stay in view
+# #, Role and Company stay in view while scrolling across
 FROZEN_COLUMNS = 3
 
 
@@ -57,8 +57,8 @@ def format_tab(worksheet: gspread.Worksheet, columns: list[SheetColumn], rows: l
     headers = [column.header for column in columns]
     if "Fit" in headers:
         requests += _fit_colours(sheet_id, headers.index("Fit"), row_count)
-    if "Link" in headers:
-        requests.append(_clickable_links(sheet_id, headers.index("Link"), rows))
+    if LINK_COLUMN in headers:
+        requests.append(_clickable_links(sheet_id, headers.index(LINK_COLUMN), rows))
     if "Status" in headers:
         requests.append(_status_dropdown(sheet_id, headers.index("Status"), row_count))
     worksheet.spreadsheet.batch_update({"requests": requests})
