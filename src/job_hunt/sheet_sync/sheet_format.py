@@ -32,6 +32,9 @@ def format_tab(worksheet: gspread.Worksheet, columns: list[SheetColumn], rows: l
     sheet_id = worksheet.id
     row_count = len(rows)
     requests = _removals(worksheet) + [
+        # every cell back to plain: a format or dropdown an earlier layout
+        # put on a column must not stay behind on whatever moved there
+        _reset_all_cells(sheet_id, row_count, len(columns)),
         _frozen_panes(sheet_id),
         _row_heights(sheet_id, 0, 1, HEADER_ROW_PIXELS),
         _row_heights(sheet_id, 1, row_count, BODY_ROW_PIXELS),
@@ -42,18 +45,8 @@ def format_tab(worksheet: gspread.Worksheet, columns: list[SheetColumn], rows: l
     ]
     for index, column in enumerate(columns):
         requests.append(_column_width(sheet_id, index, column.width, hidden=column.header == KEY_COLUMN))
-        if column.centred:
-            requests.append(
-                _cells(
-                    sheet_id,
-                    1,
-                    row_count,
-                    index,
-                    index + 1,
-                    {"horizontalAlignment": "CENTER"},
-                    "horizontalAlignment",
-                )
-            )
+        alignment = {"horizontalAlignment": "CENTER" if column.centred else "LEFT"}
+        requests.append(_cells(sheet_id, 1, row_count, index, index + 1, alignment, "horizontalAlignment"))
     headers = [column.header for column in columns]
     if "Fit" in headers:
         requests += _fit_colours(sheet_id, headers.index("Fit"), row_count)
@@ -78,6 +71,16 @@ def _removals(worksheet: gspread.Worksheet) -> list[dict[str, Any]]:
         {"deleteBanding": {"bandedRangeId": band["bandedRangeId"]}} for band in sheet.get("bandedRanges", [])
     ]
     return removals
+
+
+def _reset_all_cells(sheet_id: int, row_count: int, column_count: int) -> dict[str, Any]:
+    return {
+        "repeatCell": {
+            "range": _range(sheet_id, 0, row_count, 0, column_count),
+            "cell": {},
+            "fields": "userEnteredFormat,dataValidation",
+        }
+    }
 
 
 def _range(sheet_id: int, first_row: int, end_row: int, first_column: int, end_column: int) -> dict[str, int]:

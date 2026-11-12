@@ -73,33 +73,31 @@ def jobs_columns(sponsor_status: Callable[[str], str], screening_of: ScreeningOf
         return value
 
     return [
-        # what the job is, and where to read it
+        # the role: what it is, where to read it, where it was found
         SheetColumn(SEQUENCE_COLUMN, 45, centred=True),
         SheetColumn("Role", 300, lambda listing: listing.primary.title),
         SheetColumn("Company", 180, lambda listing: listing.primary.company_name),
         SheetColumn(LINK_COLUMN, 120, lambda listing: listing.primary.url, centred=True),
         SheetColumn("JD", 260, lambda listing: (listing.primary.description or "")[:MAX_CELL_CHARACTERS]),
         SheetColumn("Location", 160, lambda listing: listing.primary.location or ""),
+        SheetColumn("Type", 150, lambda listing: listing.primary.employment_type or ""),
+        SheetColumn("Found on", 170, lambda listing: ", ".join(listing.sources)),
+        SheetColumn("Found by", 80, lambda listing: FOUND_BY_AGENT, centred=True),
+        # facts: visa and dates
+        SheetColumn("Sponsorship in advert", 140, screened(lambda screening: screening.sponsorship), True),
+        SheetColumn(
+            "Sponsor licence", 110, lambda listing: sponsor_status(listing.primary.company_name), True
+        ),
         SheetColumn("Closes", 95, lambda listing: _date(listing.closes_at), centred=True),
         SheetColumn("Start", 120, screened(lambda screening: screening.start_date)),
-        # the screening's verdict, then the user's columns to act on it
+        SheetColumn("Posted", 95, lambda listing: _date(listing.primary.posted_at), centred=True),
+        SheetColumn("First fetched", 105, lambda listing: _date(_first_fetched(listing)), centred=True),
+        # derived: pay, the screening's verdict, then the user's columns
+        SheetColumn("Salary", 150, lambda listing: listing.primary.salary_text or ""),
         SheetColumn("Fit", 90, lambda listing: fit_of(screening_of(listing)), centred=True),
         SheetColumn("Why", 320, screened(lambda screening: screening.reason)),
         SheetColumn("Status", 120, centred=True),
         SheetColumn("Notes", 220),
-        # the terms
-        SheetColumn("Type", 150, lambda listing: listing.primary.employment_type or ""),
-        SheetColumn("Salary", 150, lambda listing: listing.primary.salary_text or ""),
-        # visa
-        SheetColumn(
-            "Sponsor licence", 110, lambda listing: sponsor_status(listing.primary.company_name), True
-        ),
-        SheetColumn("Sponsorship in advert", 140, screened(lambda screening: screening.sponsorship), True),
-        # where it came from, and when
-        SheetColumn("Posted", 95, lambda listing: _date(listing.primary.posted_at), centred=True),
-        SheetColumn("First fetched", 105, lambda listing: _date(_first_fetched(listing)), centred=True),
-        SheetColumn("Found on", 170, lambda listing: ", ".join(listing.sources)),
-        SheetColumn("Found by", 80, lambda listing: FOUND_BY_AGENT, centred=True),
         SheetColumn(KEY_COLUMN, 60),
     ]
 
@@ -110,10 +108,10 @@ def skipped_columns(reason_of: Callable[[Listing], str]) -> list[SheetColumn]:
         SheetColumn("Role", 300, lambda listing: listing.primary.title),
         SheetColumn("Company", 180, lambda listing: listing.primary.company_name),
         SheetColumn(LINK_COLUMN, 120, lambda listing: listing.primary.url, centred=True),
-        SheetColumn("Skip reason", 340, reason_of),
         SheetColumn("Location", 160, lambda listing: listing.primary.location or ""),
         SheetColumn("Found on", 170, lambda listing: ", ".join(listing.sources)),
         SheetColumn("First fetched", 105, lambda listing: _date(_first_fetched(listing)), centred=True),
+        SheetColumn("Skip reason", 340, reason_of),
         SheetColumn(KEY_COLUMN, 60),
     ]
 

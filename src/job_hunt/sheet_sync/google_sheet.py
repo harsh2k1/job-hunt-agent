@@ -11,6 +11,7 @@ from job_hunt.job_store.job_repository import JobRepository
 from job_hunt.job_store.models import ListingScreening, utc_now
 from job_hunt.job_store.screening_repository import ScreeningRepository
 from job_hunt.job_store.sponsor_repository import SponsorRepository
+from job_hunt.sheet_sync.sheet_check import check_tab
 from job_hunt.sheet_sync.sheet_format import format_tab
 from job_hunt.sheet_sync.sheet_rows import (
     ScreenedListing,
@@ -73,6 +74,10 @@ class GoogleSheetSync:
         self._rewrite(jobs_tab, build_jobs_rows(kept, columns, user_cells, screening_of), columns)
         skipped_tab = self._worksheet(spreadsheet, self._sheet_settings.skipped_worksheet)
         self._rewrite(skipped_tab, build_skipped_rows(skipped), skipped_columns(lambda listing: ""))
+        # read back what Google now shows, and fail loudly if it isn't right
+        problems = check_tab(jobs_tab, columns) + check_tab(skipped_tab, skipped_columns(lambda listing: ""))
+        if problems:
+            raise SheetSyncError("the sheet doesn't look as it should: " + "; ".join(problems[:10]))
         logger.info("sheet: %d listings on Jobs, %d on Skipped", len(kept), len(skipped))
         return len(kept), len(skipped)
 
