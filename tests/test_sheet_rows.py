@@ -20,58 +20,57 @@ COLUMNS = jobs_columns(lambda company: "exact", NO_SCREENING)
 
 def listing(key: str, title: str, closes_in_days: int | None = None) -> Listing:
     job = StoredJob(
-        source="greenhouse",
-        source_job_id=key,
-        title=title,
-        company_name="Wise",
-        location="London",
-        url=f"https://example.com/{key}",
+        source="greenhouse", source_job_id=key, title=title, company_name="Wise", location="London",
+        url=f"https://example.com/{key}", first_seen_at=NOW, last_seen_at=NOW,
         closes_at=NOW + timedelta(days=closes_in_days) if closes_in_days is not None else None,
-        first_seen_at=NOW,
-        last_seen_at=NOW,
-    )
+    )  # fmt: skip
     return Listing(key, (job,))
 
 
-def test_jobs_are_ordered_by_deadline_and_say_who_found_them():
-    rows = build_jobs_rows(
-        [listing("a", "No deadline"), listing("b", "Closes later", 20), listing("c", "Closes soon", 3)],
-        COLUMNS,
-        read_user_cells([]),
-        NO_SCREENING,
+def jobs_rows(listings, user_cells=None):
+    return build_jobs_rows(listings, COLUMNS, user_cells or read_user_cells([]), NO_SCREENING)
+
+
+def test_jobs_tab_has_numbered_rows_in_a_fixed_column_order():
+    rows = jobs_rows(
+        [listing("a", "No deadline"), listing("b", "Closes later", 20), listing("c", "Closes soon", 3)]
     )
     header = rows[0]
-    title = header.index("Title")
-    assert [row[title] for row in rows[1:]] == ["Closes soon", "Closes later", "No deadline"]
+    assert header[:5] == ["#", "Fit", "Role", "Company", "Location"]
+    assert header[-1] == KEY_COLUMN
+    assert [row[0] for row in rows[1:]] == ["1", "2", "3"]
+    assert [row[header.index("Role")] for row in rows[1:]] == ["Closes soon", "Closes later", "No deadline"]
     assert rows[1][header.index("Fit")] == "not screened yet"
-    assert header[-3:] == ["Status", "Notes", KEY_COLUMN]
     assert rows[1][header.index("Found by")] == "agent"
-    assert rows[1][header.index("Found on")] == "greenhouse"
 
 
-def test_the_users_status_notes_and_own_rows_survive_a_resync():
-    first = build_jobs_rows([listing("a", "Data Scientist", 5)], COLUMNS, read_user_cells([]), NO_SCREENING)
-    header = first[0]
-    first[1][header.index("Status")] = "Applied"
-    own_row = [""] * len(header)
-    own_row[header.index("Title")], own_row[header.index("Found by")] = "Friend's referral at Revolut", "self"
-    first.append(own_row)
-
-    second = build_jobs_rows(
-        [listing("a", "Data Scientist", 5), listing("b", "ML Engineer", 9)],
-        COLUMNS,
-        read_user_cells(first),
-        NO_SCREENING,
+def test_the_users_cells_and_own_rows_survive_even_a_new_column_order():
+    # the sheet as an older layout left it: different order, the user's edits in it
+    old_layout = [
+        ["Title", "Company", "Status", "Notes", "Found by", KEY_COLUMN],
+        ["Data Scientist", "Wise", "Applied", "Referral from Sam", "agent", "a"],
+        ["Friend's referral at Revolut", "Revolut", "To apply", "", "self", ""],
+    ]
+    rows = jobs_rows(
+        [listing("a", "Data Scientist", 5), listing("b", "ML Engineer", 9)], read_user_cells(old_layout)
     )
-    assert second[1][header.index("Status")] == "Applied"
-    assert second[2][header.index("Status")] == ""
-    assert second[-1][header.index("Title")] == "Friend's referral at Revolut"
-    assert second[-1][header.index("Found by")] == "self"
+    header = rows[0]
+    status, notes = header.index("Status"), header.index("Notes")
+    assert (rows[1][status], rows[1][notes]) == ("Applied", "Referral from Sam")
+    assert rows[2][status] == ""
+    own = rows[3]
+    assert (own[0], own[header.index("Company")], own[status], own[header.index("Found by")]) == (
+        "3",
+        "Revolut",
+        "To apply",
+        "self",
+    )
 
 
-def test_skipped_rows_carry_the_reason():
+def test_skipped_rows_are_numbered_and_carry_the_reason():
     rows = build_skipped_rows([ScreenedListing(listing("a", "Barista"), "title isn't a data / AI role")])
-    assert rows[1][rows[0].index("Skip reason")] == "title isn't a data / AI role"
+    assert rows[0][:3] == ["#", "Skip reason", "Role"]
+    assert rows[1][:3] == ["1", "title isn't a data / AI role", "Barista"]
 
 
 def test_rule_screening_keeps_data_roles_and_says_why_others_go():

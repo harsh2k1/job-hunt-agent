@@ -11,14 +11,17 @@ from job_hunt.job_store.job_repository import JobRepository
 from job_hunt.job_store.models import ListingScreening, utc_now
 from job_hunt.job_store.screening_repository import ScreeningRepository
 from job_hunt.job_store.sponsor_repository import SponsorRepository
+from job_hunt.sheet_sync.sheet_format import format_tab
 from job_hunt.sheet_sync.sheet_rows import (
     ScreenedListing,
+    SheetColumn,
     SponsorStatusLookup,
     build_jobs_rows,
     build_skipped_rows,
     fit_of,
     jobs_columns,
     read_user_cells,
+    skipped_columns,
 )
 
 logger = get_logger(__name__)
@@ -67,21 +70,18 @@ class GoogleSheetSync:
         jobs_tab = self._worksheet(spreadsheet, self._sheet_settings.jobs_worksheet)
         columns = jobs_columns(SponsorStatusLookup(self._sponsor_repository), screening_of)
         user_cells = read_user_cells(jobs_tab.get_all_values())
-        self._rewrite(jobs_tab, build_jobs_rows(kept, columns, user_cells, screening_of))
-        self._rewrite(
-            self._worksheet(spreadsheet, self._sheet_settings.skipped_worksheet), build_skipped_rows(skipped)
-        )
+        self._rewrite(jobs_tab, build_jobs_rows(kept, columns, user_cells, screening_of), columns)
+        skipped_tab = self._worksheet(spreadsheet, self._sheet_settings.skipped_worksheet)
+        self._rewrite(skipped_tab, build_skipped_rows(skipped), skipped_columns(lambda listing: ""))
         logger.info("sheet: %d listings on Jobs, %d on Skipped", len(kept), len(skipped))
         return len(kept), len(skipped)
 
     @staticmethod
-    def _rewrite(worksheet: gspread.Worksheet, rows: list[list[str]]) -> None:
+    def _rewrite(worksheet: gspread.Worksheet, rows: list[list[str]], columns: list[SheetColumn]) -> None:
         worksheet.clear()
         worksheet.resize(rows=max(len(rows), 2), cols=len(rows[0]))
         worksheet.update(rows, "A1", value_input_option="RAW")
-        worksheet.freeze(rows=1)
-        worksheet.format("1:1", {"textFormat": {"bold": True}})
-        worksheet.set_basic_filter()
+        format_tab(worksheet, columns, rows)
 
     def _open_spreadsheet(self) -> gspread.Spreadsheet:
         if self._sheet_settings.service_account is None or not self._sheet_settings.spreadsheet_url:

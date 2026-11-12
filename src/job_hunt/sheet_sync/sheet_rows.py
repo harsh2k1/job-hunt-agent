@@ -1,8 +1,9 @@
-"""What each tab of the job sheet shows, and which cells belong to the user.
+"""What each tab of the job sheet shows: its columns in order, each column's
+width, and which cells belong to the user.
 
-Jobs: listings kept by the screening, soonest deadline first. Status and
-Notes are the user's and survive every sync; so do rows the user adds
-(no listing key), which say "self" under Found by.
+Jobs: listings kept by the screening, best fit first. Status and Notes are
+the user's and survive every sync; so do rows the user adds (no listing
+key), which say "self" under Found by.
 Skipped: everything screened out, with the reason, so nothing vanishes.
 """
 
@@ -14,18 +15,30 @@ from job_hunt.job_pipeline.listings import Listing
 from job_hunt.job_store.models import ListingScreening
 from job_hunt.job_store.sponsor_repository import SponsorRepository
 
-USER_COLUMNS = ("Status", "Notes")
 KEY_COLUMN = "Listing key"
+SEQUENCE_COLUMN = "#"
 FOUND_BY_AGENT = "agent"
 NOT_SCREENED = "not screened yet"
 # Jobs tab order: the best fits first
 FIT_ORDER = {"strong": 0, "good": 1, "check": 2, NOT_SCREENED: 3}
+STATUS_CHOICES = ("To apply", "Applied", "Interviewing", "Offer", "Rejected", "Not interested")
+
+ScreeningOf = Callable[[Listing], ListingScreening | None]
+CellValue = Callable[[Listing], str]
 
 
 @dataclass(frozen=True)
 class SheetColumn:
     header: str
-    value: Callable[[Listing], str]
+    # width in pixels
+    width: int
+    # None: the user's column, never written by the agent
+    value: CellValue | None = None
+    centred: bool = False
+
+    @property
+    def belongs_to_user(self) -> bool:
+        return self.value is None and self.header not in (SEQUENCE_COLUMN, KEY_COLUMN)
 
 
 @dataclass(frozen=True)
@@ -43,15 +56,12 @@ def _first_fetched(listing: Listing) -> datetime:
     return min(job.first_seen_at for job in listing.sightings)
 
 
-ScreeningOf = Callable[[Listing], ListingScreening | None]
-
-
 def fit_of(screening: ListingScreening | None) -> str:
     return screening.fit if screening else NOT_SCREENED
 
 
 def jobs_columns(sponsor_status: Callable[[str], str], screening_of: ScreeningOf) -> list[SheetColumn]:
-    def screened(read: Callable[[ListingScreening], str | int | None]) -> Callable[[Listing], str]:
+    def screened(read: Callable[[ListingScreening], str | int | None]) -> CellValue:
         def value(listing: Listing) -> str:
             screening = screening_of(listing)
             result = read(screening) if screening else None
@@ -60,35 +70,43 @@ def jobs_columns(sponsor_status: Callable[[str], str], screening_of: ScreeningOf
         return value
 
     return [
-        SheetColumn("Fit", lambda listing: fit_of(screening_of(listing))),
-        SheetColumn("Why", screened(lambda screening: screening.reason)),
-        SheetColumn("Title", lambda listing: listing.primary.title),
-        SheetColumn("Company", lambda listing: listing.primary.company_name),
-        SheetColumn("Location", lambda listing: listing.primary.location or ""),
-        SheetColumn("Closes", lambda listing: _date(listing.closes_at)),
-        SheetColumn("Posted", lambda listing: _date(listing.primary.posted_at)),
-        SheetColumn("Type", lambda listing: listing.primary.employment_type or ""),
-        SheetColumn("Salary", lambda listing: listing.primary.salary_text or ""),
-        SheetColumn("Sponsor licence", lambda listing: sponsor_status(listing.primary.company_name)),
-        SheetColumn("Sponsorship in advert", screened(lambda screening: screening.sponsorship)),
-        SheetColumn("Start", screened(lambda screening: screening.start_date)),
-        SheetColumn("Found on", lambda listing: ", ".join(listing.sources)),
-        SheetColumn("First fetched", lambda listing: _date(_first_fetched(listing))),
-        SheetColumn("Found by", lambda listing: FOUND_BY_AGENT),
-        SheetColumn("Link", lambda listing: listing.primary.url),
+        SheetColumn(SEQUENCE_COLUMN, 45, centred=True),
+        SheetColumn("Fit", 90, lambda listing: fit_of(screening_of(listing)), centred=True),
+        SheetColumn("Role", 300, lambda listing: listing.primary.title),
+        SheetColumn("Company", 180, lambda listing: listing.primary.company_name),
+        SheetColumn("Location", 160, lambda listing: listing.primary.location or ""),
+        SheetColumn("Closes", 95, lambda listing: _date(listing.closes_at), centred=True),
+        SheetColumn("Start", 120, screened(lambda screening: screening.start_date)),
+        SheetColumn("Why", 320, screened(lambda screening: screening.reason)),
+        SheetColumn("Link", 120, lambda listing: listing.primary.url, centred=True),
+        SheetColumn("Status", 120, centred=True),
+        SheetColumn("Notes", 220),
+        SheetColumn("Type", 150, lambda listing: listing.primary.employment_type or ""),
+        SheetColumn("Salary", 150, lambda listing: listing.primary.salary_text or ""),
+        SheetColumn(
+            "Sponsor licence", 110, lambda listing: sponsor_status(listing.primary.company_name), True
+        ),
+        SheetColumn("Sponsorship in advert", 140, screened(lambda screening: screening.sponsorship), True),
+        SheetColumn("Posted", 95, lambda listing: _date(listing.primary.posted_at), centred=True),
+        SheetColumn("Found on", 170, lambda listing: ", ".join(listing.sources)),
+        SheetColumn("First fetched", 105, lambda listing: _date(_first_fetched(listing)), centred=True),
+        SheetColumn("Found by", 80, lambda listing: FOUND_BY_AGENT, centred=True),
+        SheetColumn(KEY_COLUMN, 60),
     ]
 
 
-SKIPPED_HEADER = [
-    "Title",
-    "Company",
-    "Location",
-    "Found on",
-    "First fetched",
-    "Skip reason",
-    "Link",
-    KEY_COLUMN,
-]
+def skipped_columns(reason_of: Callable[[Listing], str]) -> list[SheetColumn]:
+    return [
+        SheetColumn(SEQUENCE_COLUMN, 45, centred=True),
+        SheetColumn("Skip reason", 340, reason_of),
+        SheetColumn("Role", 300, lambda listing: listing.primary.title),
+        SheetColumn("Company", 180, lambda listing: listing.primary.company_name),
+        SheetColumn("Location", 160, lambda listing: listing.primary.location or ""),
+        SheetColumn("Found on", 170, lambda listing: ", ".join(listing.sources)),
+        SheetColumn("First fetched", 105, lambda listing: _date(_first_fetched(listing)), centred=True),
+        SheetColumn("Link", 120, lambda listing: listing.primary.url, centred=True),
+        SheetColumn(KEY_COLUMN, 60),
+    ]
 
 
 class SponsorStatusLookup:
@@ -115,6 +133,29 @@ class SponsorStatusLookup:
         return self._by_name[company_name]
 
 
+@dataclass(frozen=True)
+class UserCells:
+    # the user's cells on the agent's rows: listing key -> header -> value
+    by_key: dict[str, dict[str, str]]
+    # rows the user added, header -> value, so they survive a layout change
+    own_rows: list[dict[str, str]]
+
+
+def read_user_cells(existing_rows: list[list[str]]) -> UserCells:
+    if not existing_rows or KEY_COLUMN not in existing_rows[0]:
+        return UserCells({}, [])
+    header = existing_rows[0]
+    by_key: dict[str, dict[str, str]] = {}
+    own_rows: list[dict[str, str]] = []
+    for row in existing_rows[1:]:
+        cells = dict(zip(header, row + [""] * (len(header) - len(row)), strict=True))
+        if cells[KEY_COLUMN]:
+            by_key[cells[KEY_COLUMN]] = cells
+        elif any(value.strip() for name, value in cells.items() if name != SEQUENCE_COLUMN):
+            own_rows.append(cells)
+    return UserCells(by_key, own_rows)
+
+
 # best fit first; then soonest deadline, no deadline last; then newest
 def _jobs_order(listing: Listing, screening_of: ScreeningOf) -> tuple[int, bool, str, float]:
     closes = listing.closes_at
@@ -126,58 +167,44 @@ def _jobs_order(listing: Listing, screening_of: ScreeningOf) -> tuple[int, bool,
     )
 
 
-@dataclass(frozen=True)
-class UserCells:
-    # Status and Notes on the agent's rows, by listing key
-    by_key: dict[str, list[str]]
-    # whole rows the user added, as they were
-    own_rows: list[list[str]]
+def build_rows(columns: list[SheetColumn], listings: list[Listing], user_cells: UserCells) -> list[list[str]]:
+    rows = [[column.header for column in columns]]
+    for listing in listings:
+        kept = user_cells.by_key.get(listing.key, {})
+        rows.append([_cell(column, listing, kept, len(rows)) for column in columns])
+    # the user's own rows, after the agent's, each value under its own header
+    for own_row in user_cells.own_rows:
+        rows.append(
+            [
+                str(len(rows)) if column.header == SEQUENCE_COLUMN else own_row.get(column.header, "")
+                for column in columns
+            ]
+        )
+    return rows
 
 
-def read_user_cells(existing_rows: list[list[str]]) -> UserCells:
-    if not existing_rows or KEY_COLUMN not in existing_rows[0]:
-        return UserCells({}, [])
-    header = existing_rows[0]
-    key_index = header.index(KEY_COLUMN)
-    user_indexes = [header.index(column) for column in USER_COLUMNS if column in header]
-    by_key: dict[str, list[str]] = {}
-    own_rows: list[list[str]] = []
-    for row in existing_rows[1:]:
-        padded = row + [""] * (len(header) - len(row))
-        if padded[key_index]:
-            by_key[padded[key_index]] = [padded[index] for index in user_indexes]
-        elif any(cell.strip() for cell in padded):
-            own_rows.append(padded)
-    return UserCells(by_key, own_rows)
+def _cell(column: SheetColumn, listing: Listing, user_cells: dict[str, str], position: int) -> str:
+    if column.header == SEQUENCE_COLUMN:
+        return str(position)
+    if column.header == KEY_COLUMN:
+        return listing.key
+    if column.value is None:
+        return user_cells.get(column.header, "")
+    return column.value(listing)
 
 
 def build_jobs_rows(
     listings: list[Listing], columns: list[SheetColumn], user_cells: UserCells, screening_of: ScreeningOf
 ) -> list[list[str]]:
-    header = [column.header for column in columns] + list(USER_COLUMNS) + [KEY_COLUMN]
-    rows = [header]
-    for listing in sorted(listings, key=lambda listing: _jobs_order(listing, screening_of)):
-        kept = user_cells.by_key.get(listing.key, [""] * len(USER_COLUMNS))
-        rows.append([column.value(listing) for column in columns] + kept + [listing.key])
-    # the user's own rows, after the agent's, cut or padded to the header
-    rows += [(row + [""] * len(header))[: len(header)] for row in user_cells.own_rows]
-    return rows
+    ordered = sorted(listings, key=lambda listing: _jobs_order(listing, screening_of))
+    return build_rows(columns, ordered, user_cells)
 
 
+# grouped by reason, newest first within each
 def build_skipped_rows(skipped: list[ScreenedListing]) -> list[list[str]]:
+    reasons = {item.listing.key: item.skip_reason or "" for item in skipped}
     ordered = sorted(
         skipped, key=lambda item: (item.skip_reason or "", -_first_fetched(item.listing).timestamp())
     )
-    return [SKIPPED_HEADER] + [
-        [
-            item.listing.primary.title,
-            item.listing.primary.company_name,
-            item.listing.primary.location or "",
-            ", ".join(item.listing.sources),
-            _date(_first_fetched(item.listing)),
-            item.skip_reason or "",
-            item.listing.primary.url,
-            item.listing.key,
-        ]
-        for item in ordered
-    ]
+    columns = skipped_columns(lambda listing: reasons[listing.key])
+    return build_rows(columns, [item.listing for item in ordered], UserCells({}, []))
