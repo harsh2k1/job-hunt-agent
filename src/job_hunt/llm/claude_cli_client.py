@@ -1,6 +1,7 @@
 import json
 import shutil
 import subprocess
+import time
 from typing import Any
 
 from pydantic import ValidationError
@@ -13,6 +14,8 @@ logger = get_logger(__name__)
 
 # how the CLI words a spent usage limit
 USAGE_LIMIT_MARKERS = ("usage limit", "session limit", "rate limit", "limit reached", "resets ")
+# failures that pass on their own (no network, a slow or busy API): tried again
+TRANSIENT_MARKERS = ("can't reach the api server", "timed out", "econnreset", "overloaded", "529", "503")
 
 
 @register_llm_client
@@ -23,16 +26,30 @@ class ClaudeCliClient(LlmClient):
 
     name = "claude_cli"
 
-    def __init__(self, binary: str, timeout_seconds: int):
+    def __init__(self, binary: str, timeout_seconds: int, retries: int = 2, retry_pause_seconds: float = 30):
         self._binary = binary
         self._timeout_seconds = timeout_seconds
+        self._retries = retries
+        self._retry_pause_seconds = retry_pause_seconds
 
     @classmethod
     def from_settings(cls, llm_settings: LlmSettings) -> "ClaudeCliClient":
         return cls(llm_settings.claude_cli_binary, llm_settings.timeout_seconds)
 
     def ask(self, prompt: str, reply_schema: type[ReplyT], system_prompt: str, model: str) -> ReplyT:
-        payload = self._run(prompt, reply_schema, system_prompt, model)
+        for attempt in range(self._retries + 1):
+            try:
+                payload = self._run(prompt, reply_schema, system_prompt, model)
+                break
+            except LlmUsageLimitError:
+                raise
+            except LlmError as error:
+                if attempt == self._retries or not is_transient(str(error)):
+                    raise
+                logger.warning(
+                    "claude %s: %s; trying again in %.0fs", model, error, self._retry_pause_seconds
+                )
+                time.sleep(self._retry_pause_seconds)
         try:
             return reply_schema.model_validate(payload.get("structured_output"))
         except ValidationError as error:
@@ -86,3 +103,8 @@ def _error(message: str) -> LlmError:
         if any(marker in lowered for marker in USAGE_LIMIT_MARKERS)
         else LlmError(message)
     )
+
+
+def is_transient(message: str) -> bool:
+    lowered = message.lower()
+    return any(marker in lowered for marker in TRANSIENT_MARKERS)
