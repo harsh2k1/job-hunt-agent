@@ -1,7 +1,6 @@
-"""The first LLM pass: is a job title related to the candidate's fields at
-all? Titles only, many per call, each title asked once and remembered, so
-the thousands of plainly unrelated listings (pharmacist, barista, sales
-associate) cost almost nothing and never reach the advert-reading pass.
+"""The LLM's look at titles the free rules can't sort (title_rules.py): is
+the job related to the candidate's fields at all? Titles only, many per
+call, each title asked once and remembered across companies and runs.
 Anything doubtful counts as related."""
 
 import hashlib
@@ -20,7 +19,9 @@ logger = get_logger(__name__)
 TITLE_PROMPT_TEMPLATE = (
     "For each job title, say whether the job could involve any of: {relevant_fields}. "
     "related = false only when the title plainly names a job with none of them (e.g. pharmacist, barista, "
-    "sales associate, nurse, software engineer with nothing about data, ML or AI). When in doubt, true. "
+    "sales associate, nurse, software engineer with nothing about data, ML or AI). Natural-science, "
+    "medical and engineering-trade roles (biologist, chemist, geotechnical engineer) are unrelated unless "
+    "the title names data, ML or AI. When in doubt, true. "
     "Judge the title only; never consider seniority or experience."
 )
 
@@ -68,7 +69,7 @@ class TitleScreener:
         self._repository = repository
         self._prompt, self._question_hash = title_question(screening_settings)
 
-    # asks about every title without a current answer; each batch is stored
+    # asks about every title given that has no current answer; each batch is stored
     # as soon as it's answered, a failed batch's titles are asked next run
     def screen(self, titles: list[str]) -> TitleScreeningReport:
         report = TitleScreeningReport()

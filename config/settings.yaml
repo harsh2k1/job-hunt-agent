@@ -368,6 +368,235 @@ default:
     min_runs_for_baseline: 3
     drop_warning_ratio: 0.3
 
+  # Titles are sorted for free before any LLM sees them. A title with a
+  # keep term goes on to the advert reading; one with a drop term (and no
+  # keep term: keep wins) is skipped as unrelated; the rest are judged by
+  # the LLM from the title, anything doubtful kept. Whole words, any case.
+  # Drop terms name other trades only, so a relevant title can't be lost.
+  title_rules:
+    keep_terms:
+      - data
+      - analyst
+      - analysts
+      - analytics
+      - analytical
+      - scientist
+      - scientists
+      - data science
+      - machine learning
+      - ml
+      - ai
+      - artificial intelligence
+      - llm
+      - llms
+      - genai
+      - generative
+      - nlp
+      - computer vision
+      - deep learning
+      - python
+      - quant
+      - quants
+      - quantitative
+      - statistician
+      - statistics
+      - statistical
+      - insight
+      - insights
+      - bi
+      - business intelligence
+      - mlops
+      - research engineer
+      - research scientist
+      - applied scientist
+      - algorithm
+      - algorithms
+      - econometrics
+      - actuarial
+      - modelling
+      - modeller
+      - fraud
+      - risk analytics
+      - research
+    drop_terms:
+      - pharmacist
+      - pharmacy
+      - nurse
+      - nursing
+      - midwife
+      - doctor
+      - gp
+      - dentist
+      - dental
+      - physiotherapist
+      - therapist
+      - psychologist
+      - carer
+      - care assistant
+      - care worker
+      - support worker
+      - social worker
+      - barista
+      - chef
+      - cook
+      - kitchen
+      - waiter
+      - waitress
+      - bartender
+      - bar staff
+      - housekeeper
+      - housekeeping
+      - cleaner
+      - porter
+      - driver
+      - courier
+      - delivery driver
+      - warehouse
+      - forklift
+      - picker
+      - packer
+      - labourer
+      - operative
+      - electrician
+      - plumber
+      - mechanic
+      - technician
+      - welder
+      - carpenter
+      - joiner
+      - retail
+      - store
+      - shop
+      - cashier
+      - sales
+      - account executive
+      - account manager
+      - business development
+      - recruiter
+      - recruitment
+      - talent acquisition
+      - teacher
+      - teaching
+      - tutor
+      - lecturer
+      - solicitor
+      - lawyer
+      - paralegal
+      - legal
+      - counsel
+      - accountant
+      - accounting
+      - auditor
+      - audit
+      - tax
+      - payroll
+      - bookkeeper
+      - receptionist
+      - administrator
+      - admin
+      - secretary
+      - customer service
+      - customer success
+      - call centre
+      - marketing
+      - copywriter
+      - designer
+      - design
+      - architect
+      - surveyor
+      - civil engineer
+      - civil engineering
+      - mechanical engineer
+      - electrical engineer
+      - structural
+      - construction
+      - biologist
+      - chemist
+      - physicist
+      - clinical
+      - veterinary
+      - security officer
+      - hospitality
+      - events
+      - hr
+      - human resources
+      - people partner
+      - frontend
+      - front-end
+      - ios
+      - android
+      - product manager
+      - product owner
+      - project manager
+      - programme manager
+      - program manager
+      - delivery manager
+      - engagement manager
+      - operations
+      - compliance
+      - finance
+      - procurement
+      - software engineer
+      - software developer
+      - software development engineer
+      - backend
+      - back-end
+      - full stack
+      - full-stack
+      - site reliability
+      - sre
+      - devops
+      - devsecops
+      - network engineer
+      - firmware
+      - embedded
+      - hardware
+      - systems engineer
+      - quality engineer
+      - test engineer
+      - qa
+      - manufacturing
+      - process engineer
+      - field engineer
+      - project engineer
+      - site manager
+      - facilities
+      - maintenance
+      - apprentice
+      - duty manager
+      - team leader
+      - bid manager
+      - partnerships
+      - communications
+      - content
+      - journalist
+      - editor
+      - writer
+      - producer
+      - photographer
+      - investment banking
+      - private equity
+      - trader
+      - trading
+      - wealth
+      - insurance
+      - underwriter
+      - claims
+      - estate
+      - property
+      - lettings
+      - planner
+      - logistics
+      - supply chain
+      - buyer
+      - merchandiser
+      - fashion
+      - beauty
+      - fitness
+      - coach
+      - consultant
+      - associate
+
   llm:
     backend: claude_cli
     claude_cli_binary: claude
@@ -401,7 +630,8 @@ default:
       - NLP
       - computer vision
       - MLOps
-      - research involving data or models
+      - Python development
+      - machine learning or AI research
       - quantitative research
       - fraud, risk or financial-crime analytics
 

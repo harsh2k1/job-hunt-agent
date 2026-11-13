@@ -322,6 +322,12 @@ class PortalLoginsSettings(StrictModel):
     kcl: PortalLogin | None
 
 
+class TitleRulesSettings(StrictModel):
+    # whole words, any case; a keep term wins over a drop term
+    keep_terms: list[str] = Field(min_length=1)
+    drop_terms: list[str] = Field(min_length=1)
+
+
 class LlmSettings(StrictModel):
     # registered LLM client; claude_cli runs the Claude Code CLI on the
     # user's subscription (no API key)
@@ -384,6 +390,7 @@ class Settings(StrictModel):
     company_discovery: CompanyDiscoverySettings
     portal_logins: PortalLoginsSettings
     source_health: SourceHealthSettings
+    title_rules: TitleRulesSettings
     llm: LlmSettings
     llm_screening: LlmScreeningSettings
     google_sheet: GoogleSheetSettings

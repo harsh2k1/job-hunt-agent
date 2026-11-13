@@ -4,6 +4,7 @@ from job_hunt.common.settings import settings as app_settings
 from job_hunt.common.settings_schema import Settings
 from job_hunt.job_pipeline.live_listings import live_listings
 from job_hunt.job_pipeline.llm_screening import LlmScreening, ScreeningRunReport
+from job_hunt.job_pipeline.title_rules import TitleRules
 from job_hunt.job_pipeline.title_screening import TitleScreener, TitleScreeningReport
 from job_hunt.job_store.job_repository import JobRepository
 from job_hunt.job_store.models import utc_now
@@ -41,8 +42,10 @@ def screen_live_listings(settings: Settings = app_settings) -> FullScreeningRepo
     job_repository, title_repository = JobRepository(), TitleScreeningRepository()
     now = utc_now()
     unscreened = live_listings(settings, job_repository, title_repository, now)
+    # only titles the free rules can't sort go to the LLM
+    rules = TitleRules(settings.title_rules)
     title_report = TitleScreener(settings.llm_screening, llm_client, title_repository).screen(
-        [listing.primary.title for listing in unscreened.kept]
+        [listing.primary.title for listing in unscreened.kept if rules.rule(listing.primary.title) is None]
     )
     kept = live_listings(settings, job_repository, title_repository, now).kept
     advert_report = LlmScreening(settings.llm_screening, llm_client, ScreeningRepository()).screen(kept)

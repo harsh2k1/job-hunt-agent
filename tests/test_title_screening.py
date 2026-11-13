@@ -84,3 +84,17 @@ def test_live_listings_drop_only_closed_and_unrelated_titles(database):
         ("Barista", "Not a related role (by title)"),
         ("ML Engineer", "Closing date has passed"),
     ]
+
+
+def test_the_llm_answer_counts_only_for_titles_the_rules_cant_settle(database):
+    JobRepository(database).save_fetched_jobs(
+        [job("1", "Staff Engineer"), job("2", "Forward Deployed Engineer")]
+    )
+    titles = TitleScreeningRepository(database)
+    screener(database, FakeLlm()).screen(["Forward Deployed Engineer"])
+    live = live_listings(settings, JobRepository(database), titles, datetime.now(timezone.utc))
+    # both are LLM territory; "Staff Engineer" hasn't been asked, so it stays
+    assert sorted(listing.primary.title for listing in live.kept) == [
+        "Forward Deployed Engineer",
+        "Staff Engineer",
+    ]
