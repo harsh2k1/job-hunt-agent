@@ -368,39 +368,6 @@ default:
     min_runs_for_baseline: 3
     drop_warning_ratio: 0.3
 
-  # The rule pass over listings (no LLM). Skipped listings stay visible, with
-  # the reason, on the sheet's Skipped tab. Whole words, any case.
-  screening:
-    relevant_title_terms:
-      - data
-      - machine learning
-      - ml
-      - ai
-      - artificial intelligence
-      - deep learning
-      - nlp
-      - llm
-      - computer vision
-      - analytics
-      - analyst
-      - scientist
-      - research
-      - researcher
-      - quant
-      - quantitative
-      - statistician
-      - statistics
-      - insight
-      - insights
-      - mlops
-      - genai
-      - generative
-      - fraud
-      - aml
-      - kyc
-      - financial crime
-      - risk modelling
-
   llm:
     backend: claude_cli
     claude_cli_binary: claude
@@ -416,6 +383,7 @@ default:
     first_pass_model: haiku
     second_pass_model: sonnet
     batch_size: 20
+    title_batch_size: 150
     advert_opening_chars: 1200
     advert_key_fact_chars: 1500
     max_listings_per_run: 300

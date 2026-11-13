@@ -1,8 +1,6 @@
 from datetime import datetime, timedelta, timezone
 
-from job_hunt.common.settings import settings
 from job_hunt.job_pipeline.listings import Listing
-from job_hunt.job_pipeline.rule_screening import RuleScreening
 from job_hunt.job_store.models import StoredJob
 from job_hunt.sheet_sync.sheet_rows import (
     KEY_COLUMN,
@@ -75,17 +73,3 @@ def test_skipped_rows_are_numbered_and_carry_the_reason():
     rows = build_skipped_rows([ScreenedListing(listing("a", "Barista"), "title isn't a data / AI role")])
     assert rows[0][-2:] == ["Skip reason", KEY_COLUMN]
     assert rows[1][-2] == "title isn't a data / AI role"
-
-
-def test_rule_screening_keeps_data_roles_and_says_why_others_go():
-    screening = RuleScreening(settings.screening)
-    assert screening.screen(listing("a", "Graduate Data Scientist", 10), NOW).kept
-    assert screening.screen(listing("b", "Machine Learning Intern"), NOW).kept
-    assert (
-        screening.screen(listing("c", "Pharmacist - 30 hours"), NOW).reason == "title isn't a data / AI role"
-    )
-    # seniority is never a reason on its own: the start-date rule decides later
-    assert screening.screen(listing("d", "Senior Data Scientist"), NOW).kept
-    assert screening.screen(listing("e", "Data Analyst", -1), NOW).reason == "closing date has passed"
-    # whole words: "Maintenance" isn't "ai", "Email" isn't "ml"
-    assert not screening.screen(listing("f", "Maintenance Engineer"), NOW).kept

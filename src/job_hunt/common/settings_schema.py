@@ -322,11 +322,6 @@ class PortalLoginsSettings(StrictModel):
     kcl: PortalLogin | None
 
 
-class ScreeningSettings(StrictModel):
-    # a listing is kept only if its title has one of these (whole words)
-    relevant_title_terms: list[str] = Field(min_length=1)
-
-
 class LlmSettings(StrictModel):
     # registered LLM client; claude_cli runs the Claude Code CLI on the
     # user's subscription (no API key)
@@ -342,6 +337,8 @@ class LlmScreeningSettings(StrictModel):
     first_pass_model: str
     second_pass_model: str
     batch_size: int = Field(gt=0, le=50)
+    # titles per call in the first pass (titles only, so many fit)
+    title_batch_size: int = Field(gt=0, le=300)
     # what the LLM reads of an advert: its opening, plus every line from
     # anywhere in it about visas, start dates, experience and hours, so the
     # deciding lines are never cut off
@@ -387,7 +384,6 @@ class Settings(StrictModel):
     company_discovery: CompanyDiscoverySettings
     portal_logins: PortalLoginsSettings
     source_health: SourceHealthSettings
-    screening: ScreeningSettings
     llm: LlmSettings
     llm_screening: LlmScreeningSettings
     google_sheet: GoogleSheetSettings

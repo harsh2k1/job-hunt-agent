@@ -123,9 +123,7 @@ class LlmScreeningStep(DailyRunStep):
 
     def run(self) -> StepOutcome:
         report = screen_live_listings(self._settings)
-        return StepOutcome(
-            self.name, not report.failed_batches and not report.stopped_by_usage_limit, report.summary()
-        )
+        return StepOutcome(self.name, report.succeeded, report.summary())
 
 
 class SheetSyncStep(DailyRunStep):

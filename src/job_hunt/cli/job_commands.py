@@ -153,4 +153,4 @@ class ScreenListingsCommand(CliCommand):
     def run(self, args: argparse.Namespace) -> int:
         report = screen_live_listings()
         print(f"Screening: {report.summary()}.")
-        return EXIT_FAILURE if report.failed_batches or report.stopped_by_usage_limit else EXIT_SUCCESS
+        return EXIT_SUCCESS if report.succeeded else EXIT_FAILURE

@@ -6,11 +6,12 @@ from job_hunt.common.logger import get_logger
 from job_hunt.common.settings import settings as app_settings
 from job_hunt.common.settings_schema import Settings
 from job_hunt.job_pipeline.listings import Listing
-from job_hunt.job_pipeline.live_listings import rule_screened_live_listings
+from job_hunt.job_pipeline.live_listings import live_listings
 from job_hunt.job_store.job_repository import JobRepository
 from job_hunt.job_store.models import ListingScreening, utc_now
 from job_hunt.job_store.screening_repository import ScreeningRepository
 from job_hunt.job_store.sponsor_repository import SponsorRepository
+from job_hunt.job_store.title_screening_repository import TitleScreeningRepository
 from job_hunt.sheet_sync.sheet_check import check_tab
 from job_hunt.sheet_sync.sheet_format import format_tab
 from job_hunt.sheet_sync.sheet_rows import (
@@ -56,7 +57,7 @@ class GoogleSheetSync:
 
     def sync(self) -> tuple[int, int]:
         spreadsheet = self._open_spreadsheet()
-        live = rule_screened_live_listings(self._settings, self._job_repository, utc_now())
+        live = live_listings(self._settings, self._job_repository, TitleScreeningRepository(), utc_now())
         screenings = self._screening_repository.find(listing.key for listing in live.kept)
 
         def screening_of(listing: Listing) -> ListingScreening | None:

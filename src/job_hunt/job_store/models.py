@@ -202,3 +202,24 @@ class ListingScreening(SQLModel, table=True):
     @classmethod
     def store_time_as_utc(cls, value: datetime) -> datetime:
         return to_utc(value)
+
+
+class TitleScreening(SQLModel, table=True):
+    """Whether a job title is related to the candidate's fields at all, as
+    the LLM judged it from the title alone. Kept per title, so the same
+    title at many companies is only ever asked about once."""
+
+    __tablename__ = "title_screenings"
+
+    # the title lower-cased with spaces collapsed
+    title_key: str = Field(primary_key=True)
+    related: bool
+    # hash of the question asked; a different one means ask again
+    question_hash: str
+    model: str
+    screened_at: datetime = Field(default_factory=utc_now)
+
+    @field_validator("screened_at")
+    @classmethod
+    def store_time_as_utc(cls, value: datetime) -> datetime:
+        return to_utc(value)
