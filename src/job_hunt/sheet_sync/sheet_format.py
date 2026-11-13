@@ -12,17 +12,17 @@ from job_hunt.sheet_sync.sheet_rows import KEY_COLUMN, LINK_COLUMN, STATUS_CHOIC
 HEADER_BACKGROUND = {"red": 0.17, "green": 0.24, "blue": 0.36}
 WHITE = {"red": 1, "green": 1, "blue": 1}
 BAND_GREY = {"red": 0.96, "green": 0.97, "blue": 0.98}
-FIT_COLOURS = {
-    "strong": {"red": 0.72, "green": 0.88, "blue": 0.75},
-    "good": {"red": 0.85, "green": 0.93, "blue": 0.83},
+VERDICT_COLOURS = {
+    "apply": {"red": 0.72, "green": 0.88, "blue": 0.75},
     "check": {"red": 1.0, "green": 0.95, "blue": 0.8},
-    "skip": {"red": 0.96, "green": 0.8, "blue": 0.8},
     "not screened yet": {"red": 0.93, "green": 0.93, "blue": 0.93},
 }
 HEADER_ROW_PIXELS = 34
 BODY_ROW_PIXELS = 24
-# #, Role and Company stay in view while scrolling across
-FROZEN_COLUMNS = 3
+# a tab with a wrapping column shows up to four lines of it per row
+WRAPPED_ROW_PIXELS = 72
+# #, Role, Company and Status stay in view while scrolling across
+FROZEN_COLUMNS = 4
 
 
 LINK_TEXT = "Open advert ↗"
@@ -37,7 +37,7 @@ def format_tab(worksheet: gspread.Worksheet, columns: list[SheetColumn], rows: l
         _reset_all_cells(sheet_id, row_count, len(columns)),
         _frozen_panes(sheet_id),
         _row_heights(sheet_id, 0, 1, HEADER_ROW_PIXELS),
-        _row_heights(sheet_id, 1, row_count, BODY_ROW_PIXELS),
+        _row_heights(sheet_id, 1, row_count, body_row_pixels(columns)),
         _cells(sheet_id, 0, 1, 0, len(columns), _header_format()),
         _cells(sheet_id, 1, row_count, 0, len(columns), _body_format()),
         _banding(sheet_id, row_count, len(columns)),
@@ -45,11 +45,14 @@ def format_tab(worksheet: gspread.Worksheet, columns: list[SheetColumn], rows: l
     ]
     for index, column in enumerate(columns):
         requests.append(_column_width(sheet_id, index, column.width, hidden=column.header == KEY_COLUMN))
-        alignment = {"horizontalAlignment": "CENTER" if column.centred else "LEFT"}
-        requests.append(_cells(sheet_id, 1, row_count, index, index + 1, alignment, "horizontalAlignment"))
+        layout = {
+            "horizontalAlignment": "CENTER" if column.centred else "LEFT",
+            "wrapStrategy": "WRAP" if column.wraps else "CLIP",
+        }
+        requests.append(_cells(sheet_id, 1, row_count, index, index + 1, layout))
     headers = [column.header for column in columns]
-    if "Fit" in headers:
-        requests += _fit_colours(sheet_id, headers.index("Fit"), row_count)
+    if "Verdict" in headers:
+        requests += _verdict_colours(sheet_id, headers.index("Verdict"), row_count)
     if LINK_COLUMN in headers:
         requests.append(_clickable_links(sheet_id, headers.index(LINK_COLUMN), rows))
     if "Status" in headers:
@@ -123,7 +126,11 @@ def _header_format() -> dict[str, Any]:
 
 # long text is clipped to the column (full text on click), so rows stay one line
 def _body_format() -> dict[str, Any]:
-    return {"textFormat": {"fontSize": 10}, "verticalAlignment": "MIDDLE", "wrapStrategy": "CLIP"}
+    return {"textFormat": {"fontSize": 10}, "verticalAlignment": "TOP"}
+
+
+def body_row_pixels(columns: list[SheetColumn]) -> int:
+    return WRAPPED_ROW_PIXELS if any(column.wraps for column in columns) else BODY_ROW_PIXELS
 
 
 def _frozen_panes(sheet_id: int) -> dict[str, Any]:
@@ -178,21 +185,21 @@ def _banding(sheet_id: int, row_count: int, column_count: int) -> dict[str, Any]
     }
 
 
-def _fit_colours(sheet_id: int, column: int, row_count: int) -> list[dict[str, Any]]:
+def _verdict_colours(sheet_id: int, column: int, row_count: int) -> list[dict[str, Any]]:
     return [
         {
             "addConditionalFormatRule": {
                 "rule": {
                     "ranges": [_range(sheet_id, 1, row_count, column, column + 1)],
                     "booleanRule": {
-                        "condition": {"type": "TEXT_EQ", "values": [{"userEnteredValue": fit}]},
-                        "format": {"backgroundColor": colour, "textFormat": {"bold": fit == "strong"}},
+                        "condition": {"type": "TEXT_EQ", "values": [{"userEnteredValue": verdict}]},
+                        "format": {"backgroundColor": colour, "textFormat": {"bold": verdict == "apply"}},
                     },
                 },
                 "index": 0,
             }
         }
-        for fit, colour in FIT_COLOURS.items()
+        for verdict, colour in VERDICT_COLOURS.items()
     ]
 
 

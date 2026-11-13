@@ -5,14 +5,19 @@ import copy
 import pytest
 
 from job_hunt.sheet_sync.sheet_check import check_tab
-from job_hunt.sheet_sync.sheet_format import FROZEN_COLUMNS
+from job_hunt.sheet_sync.sheet_format import FROZEN_COLUMNS, body_row_pixels
 from job_hunt.sheet_sync.sheet_rows import LINK_COLUMN, jobs_columns
 
 COLUMNS = jobs_columns(lambda company: "", lambda listing: None)
 
 
 def good_cell(column, row_number: int) -> dict:
-    cell = {"userEnteredFormat": {"horizontalAlignment": "CENTER" if column.centred else "LEFT"}}
+    cell = {
+        "userEnteredFormat": {
+            "horizontalAlignment": "CENTER" if column.centred else "LEFT",
+            "wrapStrategy": "WRAP" if column.wraps else "CLIP",
+        }
+    }
     if column.header == "Status":
         cell["dataValidation"] = {"condition": {"type": "ONE_OF_LIST"}}
     if column.header == LINK_COLUMN:
@@ -33,6 +38,8 @@ def good_metadata() -> dict:
                             {"pixelSize": column.width, "hiddenByUser": column.header == "Listing key"}
                             for column in COLUMNS
                         ],
+                        "rowMetadata": [{"pixelSize": 34}]
+                        + [{"pixelSize": body_row_pixels(COLUMNS)}] * len(body),
                         "rowData": [{"values": header}, *body],
                     }
                 ],
@@ -73,6 +80,10 @@ def unlink_an_advert(metadata):
     del cell(metadata, 3, LINK_COLUMN)["hyperlink"]
 
 
+def clip_the_bullets(metadata):
+    cell(metadata, 1, "Why it's valid")["userEnteredFormat"]["wrapStrategy"] = "CLIP"
+
+
 def swap_two_headers(metadata):
     header = metadata["sheets"][0]["data"][0]["rowData"][0]["values"]
     header[1], header[2] = header[2], header[1]
@@ -85,6 +96,7 @@ def swap_two_headers(metadata):
         (leave_dropdown_on_why, "'Why' row 3 has a dropdown rule"),
         (unlink_an_advert, "advert link in row 4 isn't clickable"),
         (swap_two_headers, "headers are"),
+        (clip_the_bullets, "'Why it's valid' row 2 wraps as CLIP"),
     ],
 )
 def test_each_defect_the_sheet_has_had_is_caught(defect, expected):

@@ -325,8 +325,6 @@ class PortalLoginsSettings(StrictModel):
 class ScreeningSettings(StrictModel):
     # a listing is kept only if its title has one of these (whole words)
     relevant_title_terms: list[str] = Field(min_length=1)
-    # and none of these: roles that want years of experience
-    senior_title_terms: list[str]
 
 
 class LlmSettings(StrictModel):
@@ -351,8 +349,11 @@ class LlmScreeningSettings(StrictModel):
     advert_key_fact_chars: int = Field(gt=0)
     # a cap per run, to stay well inside the plan's usage limits
     max_listings_per_run: int = Field(gt=0)
-    # the candidate's profile (gitignored); a change re-screens everything
-    profile_path: Path
+    # when the candidate is free to start full-time, e.g. "September 2027";
+    # before then only graduate, part-time and suitable intern roles apply
+    available_full_time_from: str = Field(min_length=1)
+    # a role is skipped for its field only if it involves none of these
+    relevant_fields: list[str] = Field(min_length=1)
 
 
 class GoogleSheetSettings(StrictModel):

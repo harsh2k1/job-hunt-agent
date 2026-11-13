@@ -3,7 +3,7 @@ have, so a broken sheet is caught by the run, not by the user."""
 
 import gspread
 
-from job_hunt.sheet_sync.sheet_format import FROZEN_COLUMNS
+from job_hunt.sheet_sync.sheet_format import FROZEN_COLUMNS, body_row_pixels
 from job_hunt.sheet_sync.sheet_rows import KEY_COLUMN, LINK_COLUMN, SheetColumn
 
 # rows read back per tab: enough to catch a column-wide problem
@@ -18,7 +18,8 @@ def check_tab(worksheet: gspread.Worksheet, columns: list[SheetColumn]) -> list[
             "ranges": f"'{title}'!A1:{last_column}{SAMPLED_ROWS + 1}",
             "includeGridData": True,
             "fields": "sheets(properties.gridProperties,data(columnMetadata(pixelSize,hiddenByUser),"
-            "rowData.values(formattedValue,hyperlink,dataValidation,userEnteredFormat.horizontalAlignment)))",
+            "rowMetadata.pixelSize,rowData.values(formattedValue,hyperlink,dataValidation,"
+            "userEnteredFormat(horizontalAlignment,wrapStrategy))))",
         }
     )
     sheet = metadata["sheets"][0]
@@ -37,6 +38,10 @@ def check_tab(worksheet: gspread.Worksheet, columns: list[SheetColumn]) -> list[
             f"{grid.get('frozenColumnCount')} columns"
         )
 
+    expected_height = body_row_pixels(columns)
+    heights = [row.get("pixelSize") for row in data.get("rowMetadata", [])[1:]]
+    if any(height != expected_height for height in heights):
+        problems.append(f"{title}: rows are {sorted(set(heights))}px tall, expected {expected_height}")
     for index, (column, metadata_of_column) in enumerate(
         zip(columns, data.get("columnMetadata", []), strict=False)
     ):
@@ -58,6 +63,10 @@ def check_tab(worksheet: gspread.Worksheet, columns: list[SheetColumn]) -> list[
                     f"{title}: '{column.header}' row {row_number} is aligned {alignment}, "
                     f"expected {expected_alignment}"
                 )
+                break
+            wrap = cell.get("userEnteredFormat", {}).get("wrapStrategy")
+            if wrap != ("WRAP" if column.wraps else "CLIP"):
+                problems.append(f"{title}: '{column.header}' row {row_number} wraps as {wrap}")
                 break
             if "dataValidation" in cell and column.header != "Status":
                 problems.append(f"{title}: '{column.header}' row {row_number} has a dropdown rule")

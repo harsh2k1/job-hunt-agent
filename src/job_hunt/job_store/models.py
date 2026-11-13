@@ -177,14 +177,24 @@ class ListingScreening(SQLModel, table=True):
     # hash of what was sent (advert and profile); a different hash means
     # the verdict is out of date
     content_hash: str
-    # strong / good / check / skip
+    # apply / check / skip, decided in code from the facts below
     fit: str
     reason: str
     # offered / not offered / not stated
     sponsorship: str
+    # the role's field as the model read it, e.g. "data science"
+    role_field: str | None = None
+    # graduate / internship / part-time / full-time / other, as read from
+    # the advert; with part_time and starts_when_free it decides eligibility
+    kind: str | None = None
+    part_time: bool | None = None
+    # yes / no / not stated: does it start once the candidate is free?
+    starts_when_free: str | None = None
+    # bullets on why the candidate can apply and how it matches; None when
+    # they can't (or it can't be told)
+    valid_because: str | None = Field(default=None, sa_type=Text)
     # as the advert words it, e.g. "September 2027"
     start_date: str | None = None
-    experience_years: int | None = None
     model: str
     screened_at: datetime = Field(default_factory=utc_now)
 

@@ -22,8 +22,8 @@ LINK_COLUMN = "Advert link"
 MAX_CELL_CHARACTERS = 45_000
 FOUND_BY_AGENT = "agent"
 NOT_SCREENED = "not screened yet"
-# Jobs tab order: the best fits first
-FIT_ORDER = {"strong": 0, "good": 1, "check": 2, NOT_SCREENED: 3}
+# Jobs tab order: ready to apply first, then the ones to check
+VERDICT_ORDER = {"apply": 0, "check": 1, NOT_SCREENED: 2}
 STATUS_CHOICES = ("To apply", "Applied", "Interviewing", "Offer", "Rejected", "Not interested")
 
 ScreeningOf = Callable[[Listing], ListingScreening | None]
@@ -38,6 +38,9 @@ class SheetColumn:
     # None: the user's column, never written by the agent
     value: CellValue | None = None
     centred: bool = False
+    # shown in full over several lines (bullets); every other column is one
+    # clipped line
+    wraps: bool = False
 
     @property
     def belongs_to_user(self) -> bool:
@@ -77,9 +80,13 @@ def jobs_columns(sponsor_status: Callable[[str], str], screening_of: ScreeningOf
         SheetColumn(SEQUENCE_COLUMN, 45, centred=True),
         SheetColumn("Role", 300, lambda listing: listing.primary.title),
         SheetColumn("Company", 180, lambda listing: listing.primary.company_name),
+        # the user's column, kept in view next to what the job is
+        SheetColumn("Status", 120, centred=True),
         SheetColumn(LINK_COLUMN, 120, lambda listing: listing.primary.url, centred=True),
+        SheetColumn("Why it's valid", 330, screened(lambda screening: screening.valid_because), wraps=True),
         SheetColumn("JD", 260, lambda listing: (listing.primary.description or "")[:MAX_CELL_CHARACTERS]),
         SheetColumn("Location", 160, lambda listing: listing.primary.location or ""),
+        SheetColumn("Kind", 100, screened(lambda screening: screening.kind), centred=True),
         SheetColumn("Type", 150, lambda listing: listing.primary.employment_type or ""),
         SheetColumn("Found on", 170, lambda listing: ", ".join(listing.sources)),
         SheetColumn("Found by", 80, lambda listing: FOUND_BY_AGENT, centred=True),
@@ -94,9 +101,8 @@ def jobs_columns(sponsor_status: Callable[[str], str], screening_of: ScreeningOf
         SheetColumn("First fetched", 105, lambda listing: _date(_first_fetched(listing)), centred=True),
         # derived: pay, the screening's verdict, then the user's columns
         SheetColumn("Salary", 150, lambda listing: listing.primary.salary_text or ""),
-        SheetColumn("Fit", 90, lambda listing: fit_of(screening_of(listing)), centred=True),
+        SheetColumn("Verdict", 90, lambda listing: fit_of(screening_of(listing)), centred=True),
         SheetColumn("Why", 320, screened(lambda screening: screening.reason)),
-        SheetColumn("Status", 120, centred=True),
         SheetColumn("Notes", 220),
         SheetColumn(KEY_COLUMN, 60),
     ]
@@ -163,11 +169,11 @@ def read_user_cells(existing_rows: list[list[str]]) -> UserCells:
     return UserCells(by_key, own_rows)
 
 
-# best fit first; then soonest deadline, no deadline last; then newest
+# ready to apply first; then soonest deadline, no deadline last; then newest
 def _jobs_order(listing: Listing, screening_of: ScreeningOf) -> tuple[int, bool, str, float]:
     closes = listing.closes_at
     return (
-        FIT_ORDER.get(fit_of(screening_of(listing)), len(FIT_ORDER)),
+        VERDICT_ORDER.get(fit_of(screening_of(listing)), len(VERDICT_ORDER)),
         closes is None,
         closes.isoformat() if closes else "",
         -_first_fetched(listing).timestamp(),

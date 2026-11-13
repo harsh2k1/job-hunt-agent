@@ -400,31 +400,17 @@ default:
       - kyc
       - financial crime
       - risk modelling
-    # Experienced-hire titles: full-time roles that start now, which the
-    # candidate can't take until September 2027 (see the profile).
-    senior_title_terms:
-      - senior
-      - sr
-      - lead
-      - principal
-      - staff
-      - head
-      - director
-      - manager
-      - vp
-      - chief
-      - architect
-      - expert
 
   llm:
     backend: claude_cli
     claude_cli_binary: claude
     timeout_seconds: 600
 
-  # LLM screening of what the rule pass keeps. Each listing is screened once
-  # (the verdict is stored with a hash of the advert and the profile) and
-  # again only if either changes. Haiku first; Sonnet only for the ones
-  # Haiku marks "check" that have advert text.
+  # LLM screening of what the rule pass keeps. The model only reads facts
+  # out of each advert (field, kind, part-time, start); code then skips a
+  # listing only if it's unrelated or can't be taken. Each listing is
+  # screened once, again only if its advert changes. Haiku reads everything;
+  # Sonnet only re-reads adverts whose field Haiku couldn't tell.
   llm_screening:
     enabled: true
     first_pass_model: haiku
@@ -433,7 +419,23 @@ default:
     advert_opening_chars: 1200
     advert_key_fact_chars: 1500
     max_listings_per_run: 300
-    profile_path: "@format {this.REPO_ROOT}/config/candidate_profile.yaml"
+    available_full_time_from: September 2027
+    # A role is skipped for its field only if it involves none of these;
+    # anything doubtful stays. The only other skip: full-time and not
+    # starting once free (available_full_time_from).
+    relevant_fields:
+      - data science
+      - machine learning
+      - AI
+      - analytics
+      - data analysis
+      - data engineering
+      - NLP
+      - computer vision
+      - MLOps
+      - research involving data or models
+      - quantitative research
+      - fraud, risk or financial-crime analytics
 
   # The job list in a Google Sheet, rewritten after every run. Status and
   # Notes are yours: a sync keeps what's typed there. Share the sheet with

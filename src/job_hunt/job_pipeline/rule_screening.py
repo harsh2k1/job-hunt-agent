@@ -26,7 +26,6 @@ def whole_word_pattern(terms: Iterable[str]) -> re.Pattern[str]:
 class RuleScreening:
     def __init__(self, screening_settings: ScreeningSettings):
         self._relevant_title = whole_word_pattern(screening_settings.relevant_title_terms)
-        self._senior_title = whole_word_pattern(screening_settings.senior_title_terms)
 
     # rules in order; the first that applies is the reason given
     def screen(self, listing: Listing, now: datetime) -> ScreeningResult:
@@ -35,7 +34,4 @@ class RuleScreening:
             return ScreeningResult(False, "closing date has passed")
         if not self._relevant_title.search(title):
             return ScreeningResult(False, "title isn't a data / AI role")
-        senior = self._senior_title.search(title)
-        if senior:
-            return ScreeningResult(False, f"senior role ({senior.group(1).lower()})")
         return ScreeningResult(True)

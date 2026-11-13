@@ -37,14 +37,14 @@ def test_jobs_tab_has_numbered_rows_in_a_fixed_column_order():
     )
     header = rows[0]
     assert header == [
-        "#", "Role", "Company", "Advert link", "JD", "Location", "Type", "Found on", "Found by",
-        "Sponsorship in advert", "Sponsor licence", "Closes", "Start", "Posted", "First fetched",
-        "Salary", "Fit", "Why", "Status", "Notes", KEY_COLUMN,
+        "#", "Role", "Company", "Status", "Advert link", "Why it's valid", "JD", "Location", "Kind", "Type",
+        "Found on", "Found by", "Sponsorship in advert", "Sponsor licence", "Closes", "Start", "Posted",
+        "First fetched", "Salary", "Verdict", "Why", "Notes", KEY_COLUMN,
     ]  # fmt: skip
     assert header[-1] == KEY_COLUMN
     assert [row[0] for row in rows[1:]] == ["1", "2", "3"]
     assert [row[header.index("Role")] for row in rows[1:]] == ["Closes soon", "Closes later", "No deadline"]
-    assert rows[1][header.index("Fit")] == "not screened yet"
+    assert rows[1][header.index("Verdict")] == "not screened yet"
     assert rows[1][header.index("Found by")] == "agent"
 
 
@@ -84,7 +84,8 @@ def test_rule_screening_keeps_data_roles_and_says_why_others_go():
     assert (
         screening.screen(listing("c", "Pharmacist - 30 hours"), NOW).reason == "title isn't a data / AI role"
     )
-    assert screening.screen(listing("d", "Senior Data Scientist"), NOW).reason == "senior role (senior)"
+    # seniority is never a reason on its own: the start-date rule decides later
+    assert screening.screen(listing("d", "Senior Data Scientist"), NOW).kept
     assert screening.screen(listing("e", "Data Analyst", -1), NOW).reason == "closing date has passed"
     # whole words: "Maintenance" isn't "ai", "Email" isn't "ml"
     assert not screening.screen(listing("f", "Maintenance Engineer"), NOW).kept
