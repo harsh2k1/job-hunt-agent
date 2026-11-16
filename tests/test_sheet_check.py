@@ -22,7 +22,9 @@ def good_cell(column, row_number: int) -> dict:
     if column.header == "Status":
         cell["dataValidation"] = {"condition": {"type": "ONE_OF_LIST"}}
     if column.header == LINK_COLUMN:
-        cell.update(formattedValue="Open advert ↗", hyperlink=f"https://example.com/{row_number}")
+        cell.update(
+            formattedValue=f"https://example.com/{row_number}", hyperlink=f"https://example.com/{row_number}"
+        )
     return cell
 
 

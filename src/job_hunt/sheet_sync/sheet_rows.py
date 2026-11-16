@@ -80,7 +80,7 @@ def jobs_columns(
         SheetColumn("Company", 180, lambda listing: listing.primary.company_name),
         # the user's column, kept in view next to what the job is
         SheetColumn("Status", 120, centred=True),
-        SheetColumn(LINK_COLUMN, 120, lambda listing: listing.primary.url, centred=True),
+        SheetColumn(LINK_COLUMN, 260, lambda listing: listing.primary.url),
         SheetColumn(
             "Why it's valid", 330, lambda listing: verdict_of(listing).valid_because or "", wraps=True
         ),
@@ -113,7 +113,7 @@ def skipped_columns(reason_of: Callable[[Listing], str]) -> list[SheetColumn]:
         SheetColumn(SEQUENCE_COLUMN, 45, centred=True),
         SheetColumn("Role", 300, lambda listing: listing.primary.title),
         SheetColumn("Company", 180, lambda listing: listing.primary.company_name),
-        SheetColumn(LINK_COLUMN, 120, lambda listing: listing.primary.url, centred=True),
+        SheetColumn(LINK_COLUMN, 260, lambda listing: listing.primary.url),
         SheetColumn("Location", 160, lambda listing: listing.primary.location or ""),
         SheetColumn("Found on", 170, lambda listing: ", ".join(listing.sources)),
         SheetColumn("First fetched", 105, lambda listing: _date(_first_fetched(listing)), centred=True),

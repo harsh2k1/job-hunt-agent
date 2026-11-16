@@ -25,9 +25,6 @@ WRAPPED_ROW_PIXELS = 72
 FROZEN_COLUMNS = 4
 
 
-LINK_TEXT = "Open advert ↗"
-
-
 def format_tab(worksheet: gspread.Worksheet, columns: list[SheetColumn], rows: list[list[str]]) -> None:
     sheet_id = worksheet.id
     row_count = len(rows)
@@ -220,8 +217,8 @@ def _status_dropdown(sheet_id: int, column: int, row_count: int) -> dict[str, An
     }
 
 
-# Each URL becomes a short clickable label. The link is a cell format, not
-# a HYPERLINK formula, so nothing in an advert's address can run.
+# Each URL is shown as itself and made clickable. The link is a cell
+# format, not a HYPERLINK formula, so nothing in an advert's address can run.
 def _clickable_links(sheet_id: int, column: int, rows: list[list[str]]) -> dict[str, Any]:
     cells = []
     for row in rows[1:]:
@@ -231,7 +228,7 @@ def _clickable_links(sheet_id: int, column: int, rows: list[list[str]]) -> dict[
                 {
                     "values": [
                         {
-                            "userEnteredValue": {"stringValue": LINK_TEXT},
+                            "userEnteredValue": {"stringValue": url},
                             "userEnteredFormat": {"textFormat": {"link": {"uri": url}}},
                         }
                     ]
