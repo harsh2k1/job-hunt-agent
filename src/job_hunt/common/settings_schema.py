@@ -355,6 +355,9 @@ class LlmScreeningSettings(StrictModel):
     # when the candidate is free to start full-time, e.g. "September 2027";
     # before then only graduate, part-time and suitable intern roles apply
     available_full_time_from: str = Field(min_length=1)
+    # when the candidate's Graduate (PSW) visa ends: graduate and full-time
+    # roles run past it, so they need an employer who can sponsor
+    graduate_visa_ends: str = Field(min_length=1)
     # a role is skipped for its field only if it involves none of these
     relevant_fields: list[str] = Field(min_length=1)
 

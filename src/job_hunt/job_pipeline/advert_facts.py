@@ -78,7 +78,10 @@ def sponsorship_in_advert(text: str | None) -> Sponsorship | None:
 KEY_FACT = re.compile(
     r"\bvisas?\b|sponsor|right to work|work permit|eligib|\bstart(?:s|ing)? (?:date|in|on|from)\b|commenc|"
     r"\bintake\b|graduat|years?(?:'|’)? (?:of )?(?:professional |relevant |industry )?experience|"
-    r"part[- ]time|hours (?:a|per) week|\bfte\b|closing date|deadline|penultimate|final[- ]year",
+    r"part[- ]time|hours (?:a|per) week|\bfte\b|closing date|deadline|penultimate|final[- ]year|"
+    r"\b(?:\d+|one|two|three|four)[- ](?:year|month)s?\b|fixed[- ]term|\bcontract\b|\bduration\b|"
+    r"\brotations?\b|"
+    r"\bpermanent\b",
     re.IGNORECASE,
 )
 

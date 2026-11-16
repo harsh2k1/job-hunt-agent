@@ -195,6 +195,9 @@ class ListingScreening(SQLModel, table=True):
     valid_because: str | None = Field(default=None, sa_type=Text)
     # as the advert words it, e.g. "September 2027"
     start_date: str | None = None
+    # by / after / not stated: does the role end by the time the candidate's
+    # Graduate visa does? Only asked where sponsorship would decide it.
+    role_end: str | None = None
     model: str
     screened_at: datetime = Field(default_factory=utc_now)
 

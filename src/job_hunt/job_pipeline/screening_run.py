@@ -4,11 +4,14 @@ from job_hunt.common.settings import settings as app_settings
 from job_hunt.common.settings_schema import Settings
 from job_hunt.job_pipeline.live_listings import live_listings
 from job_hunt.job_pipeline.llm_screening import LlmScreening, ScreeningRunReport
+from job_hunt.job_pipeline.role_length import RoleLengthReader, RoleLengthReport
+from job_hunt.job_pipeline.sponsor_status import SponsorStatusLookup
 from job_hunt.job_pipeline.title_rules import TitleRules
 from job_hunt.job_pipeline.title_screening import TitleScreener, TitleScreeningReport
 from job_hunt.job_store.job_repository import JobRepository
 from job_hunt.job_store.models import utc_now
 from job_hunt.job_store.screening_repository import ScreeningRepository
+from job_hunt.job_store.sponsor_repository import SponsorRepository
 from job_hunt.job_store.title_screening_repository import TitleScreeningRepository
 from job_hunt.llm.llm_client_factory import LlmClientFactory
 
@@ -17,6 +20,7 @@ from job_hunt.llm.llm_client_factory import LlmClientFactory
 class FullScreeningReport:
     titles: TitleScreeningReport
     adverts: ScreeningRunReport
+    lengths: RoleLengthReport
 
     @property
     def succeeded(self) -> bool:
@@ -25,6 +29,8 @@ class FullScreeningReport:
             or self.titles.stopped_by_usage_limit
             or self.adverts.failed_batches
             or self.adverts.stopped_by_usage_limit
+            or self.lengths.failed_batches
+            or self.lengths.stopped_by_usage_limit
         )
 
     def summary(self) -> str:
@@ -32,11 +38,14 @@ class FullScreeningReport:
             f"titles: {self.titles.titles_asked} asked, {self.titles.unrelated} unrelated"
             + (f", {self.titles.failed_batches} batches failed" if self.titles.failed_batches else "")
             + f"; adverts: {self.adverts.summary()}"
+            + f"; role length: {self.lengths.asked} asked, "
+            + f"{self.lengths.ending_in_time} end before the visa does"
         )
 
 
-# Both LLM passes over today's live listings: titles first (cheap, many per
-# call), then the adverts of the listings still kept.
+# The LLM passes over today's live listings: titles the rules can't sort
+# (cheap, many per call), the adverts of the listings still kept, then role
+# length only where sponsorship would decide the verdict.
 def screen_live_listings(settings: Settings = app_settings) -> FullScreeningReport:
     llm_client = LlmClientFactory.create(settings.llm)
     job_repository, title_repository = JobRepository(), TitleScreeningRepository()
@@ -48,5 +57,10 @@ def screen_live_listings(settings: Settings = app_settings) -> FullScreeningRepo
         [listing.primary.title for listing in unscreened.kept if rules.rule(listing.primary.title) is None]
     )
     kept = live_listings(settings, job_repository, title_repository, now).kept
-    advert_report = LlmScreening(settings.llm_screening, llm_client, ScreeningRepository()).screen(kept)
-    return FullScreeningReport(title_report, advert_report)
+    screening_repository = ScreeningRepository()
+    advert_report = LlmScreening(settings.llm_screening, llm_client, screening_repository).screen(kept)
+    # only where sponsorship would decide the verdict: does the role end in time?
+    length_report = RoleLengthReader(settings.llm_screening, llm_client, screening_repository).read(
+        kept, SponsorStatusLookup(SponsorRepository())
+    )
+    return FullScreeningReport(title_report, advert_report, length_report)

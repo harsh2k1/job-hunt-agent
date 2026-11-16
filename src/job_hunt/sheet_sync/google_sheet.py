@@ -6,8 +6,10 @@ import gspread
 from job_hunt.common.logger import get_logger
 from job_hunt.common.settings import settings as app_settings
 from job_hunt.common.settings_schema import Settings
+from job_hunt.job_pipeline.final_verdict import NOT_SCREENED, FinalVerdict, final_verdict
 from job_hunt.job_pipeline.listings import Listing
 from job_hunt.job_pipeline.live_listings import live_listings
+from job_hunt.job_pipeline.sponsor_status import SponsorStatusLookup
 from job_hunt.job_store.job_repository import JobRepository
 from job_hunt.job_store.models import ListingScreening, utc_now
 from job_hunt.job_store.screening_repository import ScreeningRepository
@@ -16,14 +18,11 @@ from job_hunt.job_store.title_screening_repository import TitleScreeningReposito
 from job_hunt.sheet_sync.sheet_check import check_tab, check_verdicts
 from job_hunt.sheet_sync.sheet_format import format_tab
 from job_hunt.sheet_sync.sheet_rows import (
-    NOT_SCREENED,
     ScreenedListing,
     SheetColumn,
-    SponsorStatusLookup,
     UserCells,
     build_jobs_rows,
     build_skipped_rows,
-    fit_of,
     jobs_columns,
     merge_user_cells,
     read_user_cells,
@@ -80,26 +79,38 @@ class GoogleSheetSync:
         def screening_of(listing: Listing) -> ListingScreening | None:
             return screenings.get(listing.key)
 
+        licence = SponsorStatusLookup(self._sponsor_repository)
+        visa_ends = self._settings.llm_screening.graduate_visa_ends
+        verdicts = {
+            listing.key: final_verdict(
+                screening_of(listing), licence(listing.primary.company_name), visa_ends
+            )
+            for listing in live.kept
+        }
+
+        def verdict_of(listing: Listing) -> FinalVerdict:
+            return verdicts[listing.key]
+
         by_verdict: dict[str, list[Listing]] = {"apply": [], "check": [], "skip": []}
         for listing in live.kept:
-            verdict = fit_of(screening_of(listing))
+            verdict = verdict_of(listing).verdict
             by_verdict["check" if verdict == NOT_SCREENED else verdict].append(listing)
         skipped = [ScreenedListing(listing, reason) for listing, reason in live.skipped] + [
-            ScreenedListing(listing, screenings[listing.key].reason) for listing in by_verdict["skip"]
+            ScreenedListing(listing, verdict_of(listing).reason) for listing in by_verdict["skip"]
         ]
 
         jobs_tab = self._worksheet(spreadsheet, self._sheet_settings.jobs_worksheet)
         checks_tab = self._worksheet(spreadsheet, self._sheet_settings.checks_worksheet)
         skipped_tab = self._worksheet(spreadsheet, self._sheet_settings.skipped_worksheet)
-        columns = jobs_columns(SponsorStatusLookup(self._sponsor_repository), screening_of)
+        columns = jobs_columns(licence, screening_of, verdict_of)
         # the user's Status and Notes follow a listing between Jobs and To check
         user_cells = merge_user_cells(
             read_user_cells(jobs_tab.get_all_values()), read_user_cells(checks_tab.get_all_values())
         )
         self._rewrite(
-            jobs_tab, build_jobs_rows(by_verdict["apply"], columns, user_cells, screening_of), columns
+            jobs_tab, build_jobs_rows(by_verdict["apply"], columns, user_cells, verdict_of), columns
         )
-        checks = build_jobs_rows(by_verdict["check"], columns, UserCells(user_cells.by_key, []), screening_of)
+        checks = build_jobs_rows(by_verdict["check"], columns, UserCells(user_cells.by_key, []), verdict_of)
         self._rewrite(checks_tab, checks, columns)
         skipped_columns_used = skipped_columns(lambda listing: "")
         self._rewrite(skipped_tab, build_skipped_rows(skipped), skipped_columns_used)

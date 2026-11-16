@@ -11,9 +11,9 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 
+from job_hunt.job_pipeline.final_verdict import NOT_SCREENED, FinalVerdict
 from job_hunt.job_pipeline.listings import Listing
 from job_hunt.job_store.models import ListingScreening
-from job_hunt.job_store.sponsor_repository import SponsorRepository
 
 KEY_COLUMN = "Listing key"
 SEQUENCE_COLUMN = "#"
@@ -21,12 +21,12 @@ LINK_COLUMN = "Advert link"
 # Google Sheets holds at most 50,000 characters in a cell
 MAX_CELL_CHARACTERS = 45_000
 FOUND_BY_AGENT = "agent"
-NOT_SCREENED = "not screened yet"
 # order within a tab: screened before not screened yet
 VERDICT_ORDER = {"apply": 0, "check": 1, NOT_SCREENED: 2}
 STATUS_CHOICES = ("To apply", "Applied", "Interviewing", "Offer", "Rejected", "Not interested")
 
 ScreeningOf = Callable[[Listing], ListingScreening | None]
+VerdictOf = Callable[[Listing], FinalVerdict]
 CellValue = Callable[[Listing], str]
 
 
@@ -62,11 +62,9 @@ def _first_fetched(listing: Listing) -> datetime:
     return min(job.first_seen_at for job in listing.sightings)
 
 
-def fit_of(screening: ListingScreening | None) -> str:
-    return screening.fit if screening else NOT_SCREENED
-
-
-def jobs_columns(sponsor_status: Callable[[str], str], screening_of: ScreeningOf) -> list[SheetColumn]:
+def jobs_columns(
+    sponsor_status: Callable[[str], str], screening_of: ScreeningOf, verdict_of: VerdictOf
+) -> list[SheetColumn]:
     def screened(read: Callable[[ListingScreening], str | int | None]) -> CellValue:
         def value(listing: Listing) -> str:
             screening = screening_of(listing)
@@ -83,7 +81,9 @@ def jobs_columns(sponsor_status: Callable[[str], str], screening_of: ScreeningOf
         # the user's column, kept in view next to what the job is
         SheetColumn("Status", 120, centred=True),
         SheetColumn(LINK_COLUMN, 120, lambda listing: listing.primary.url, centred=True),
-        SheetColumn("Why it's valid", 330, screened(lambda screening: screening.valid_because), wraps=True),
+        SheetColumn(
+            "Why it's valid", 330, lambda listing: verdict_of(listing).valid_because or "", wraps=True
+        ),
         SheetColumn("JD", 260, lambda listing: (listing.primary.description or "")[:MAX_CELL_CHARACTERS]),
         SheetColumn("Location", 160, lambda listing: listing.primary.location or ""),
         SheetColumn("Kind", 100, screened(lambda screening: screening.kind), centred=True),
@@ -101,8 +101,8 @@ def jobs_columns(sponsor_status: Callable[[str], str], screening_of: ScreeningOf
         SheetColumn("First fetched", 105, lambda listing: _date(_first_fetched(listing)), centred=True),
         # derived: pay, the screening's verdict, then the user's columns
         SheetColumn("Salary", 150, lambda listing: listing.primary.salary_text or ""),
-        SheetColumn("Verdict", 90, lambda listing: fit_of(screening_of(listing)), centred=True),
-        SheetColumn("Why", 320, screened(lambda screening: screening.reason)),
+        SheetColumn("Verdict", 90, lambda listing: verdict_of(listing).verdict, centred=True),
+        SheetColumn("Why", 320, lambda listing: verdict_of(listing).reason),
         SheetColumn("Notes", 220),
         SheetColumn(KEY_COLUMN, 60),
     ]
@@ -120,30 +120,6 @@ def skipped_columns(reason_of: Callable[[Listing], str]) -> list[SheetColumn]:
         SheetColumn("Skip reason", 340, reason_of),
         SheetColumn(KEY_COLUMN, 60),
     ]
-
-
-class SponsorStatusLookup:
-    """exact / possible / not found, once per employer name per sync; blank
-    when no register is loaded."""
-
-    def __init__(self, repository: SponsorRepository):
-        self._repository = repository
-        self._register_loaded = repository.register_date() is not None
-        self._by_name: dict[str, str] = {}
-
-    def __call__(self, company_name: str) -> str:
-        if not self._register_loaded:
-            return ""
-        if company_name not in self._by_name:
-            matches = self._repository.find_sponsors(company_name)
-            self._by_name[company_name] = (
-                "exact"
-                if any(match.is_exact for match in matches)
-                else "possible"
-                if matches
-                else "not found"
-            )
-        return self._by_name[company_name]
 
 
 @dataclass(frozen=True)
@@ -178,10 +154,10 @@ def read_user_cells(existing_rows: list[list[str]]) -> UserCells:
 
 
 # ready to apply first; then soonest deadline, no deadline last; then newest
-def _jobs_order(listing: Listing, screening_of: ScreeningOf) -> tuple[int, bool, str, float]:
+def _jobs_order(listing: Listing, verdict_of: VerdictOf) -> tuple[int, bool, str, float]:
     closes = listing.closes_at
     return (
-        VERDICT_ORDER.get(fit_of(screening_of(listing)), len(VERDICT_ORDER)),
+        VERDICT_ORDER.get(verdict_of(listing).verdict, len(VERDICT_ORDER)),
         closes is None,
         closes.isoformat() if closes else "",
         -_first_fetched(listing).timestamp(),
@@ -215,9 +191,9 @@ def _cell(column: SheetColumn, listing: Listing, user_cells: dict[str, str], pos
 
 
 def build_jobs_rows(
-    listings: list[Listing], columns: list[SheetColumn], user_cells: UserCells, screening_of: ScreeningOf
+    listings: list[Listing], columns: list[SheetColumn], user_cells: UserCells, verdict_of: VerdictOf
 ) -> list[list[str]]:
-    ordered = sorted(listings, key=lambda listing: _jobs_order(listing, screening_of))
+    ordered = sorted(listings, key=lambda listing: _jobs_order(listing, verdict_of))
     return build_rows(columns, ordered, user_cells)
 
 

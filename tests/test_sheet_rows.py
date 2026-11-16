@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta, timezone
 
+from job_hunt.job_pipeline.final_verdict import NOT_SCREENED, FinalVerdict
 from job_hunt.job_pipeline.listings import Listing
 from job_hunt.job_store.models import StoredJob
 from job_hunt.sheet_sync.sheet_rows import (
@@ -14,7 +15,8 @@ from job_hunt.sheet_sync.sheet_rows import (
 
 NOW = datetime(2026, 11, 11, 9, 0, tzinfo=timezone.utc)
 NO_SCREENING = lambda listing: None  # noqa: E731
-COLUMNS = jobs_columns(lambda company: "exact", NO_SCREENING)
+NO_VERDICT = lambda listing: FinalVerdict(NOT_SCREENED)  # noqa: E731
+COLUMNS = jobs_columns(lambda company: "exact", NO_SCREENING, NO_VERDICT)
 
 
 def listing(key: str, title: str, closes_in_days: int | None = None) -> Listing:
@@ -27,7 +29,7 @@ def listing(key: str, title: str, closes_in_days: int | None = None) -> Listing:
 
 
 def jobs_rows(listings, user_cells=None):
-    return build_jobs_rows(listings, COLUMNS, user_cells or read_user_cells([]), NO_SCREENING)
+    return build_jobs_rows(listings, COLUMNS, user_cells or read_user_cells([]), NO_VERDICT)
 
 
 def test_jobs_tab_has_numbered_rows_in_a_fixed_column_order():

@@ -4,11 +4,12 @@ import copy
 
 import pytest
 
+from job_hunt.job_pipeline.final_verdict import FinalVerdict
 from job_hunt.sheet_sync.sheet_check import check_tab
 from job_hunt.sheet_sync.sheet_format import FROZEN_COLUMNS, body_row_pixels
 from job_hunt.sheet_sync.sheet_rows import LINK_COLUMN, jobs_columns
 
-COLUMNS = jobs_columns(lambda company: "", lambda listing: None)
+COLUMNS = jobs_columns(lambda company: "", lambda listing: None, lambda listing: FinalVerdict("apply"))
 
 
 def good_cell(column, row_number: int) -> dict:

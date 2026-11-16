@@ -617,6 +617,9 @@ default:
     advert_key_fact_chars: 1500
     max_listings_per_run: 300
     available_full_time_from: September 2027
+    # student visa until January 2028, then the Graduate (PSW) visa for 18
+    # months: graduate and full-time roles outlast it and need sponsorship
+    graduate_visa_ends: June 2029
     # A role is skipped for its field only if it involves none of these;
     # anything doubtful stays. The only other skip: full-time and not
     # starting once free (available_full_time_from).
