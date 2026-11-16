@@ -365,6 +365,8 @@ class GoogleSheetSettings(StrictModel):
     spreadsheet_url: str | None
     # tab names: kept listings, and the ones screened out with the reason
     jobs_worksheet: str = Field(min_length=1)
+    # listings the advert doesn't settle, and those not screened yet
+    checks_worksheet: str = Field(min_length=1)
     skipped_worksheet: str = Field(min_length=1)
     # listings seen by a source within this many days
     listing_days: int = Field(gt=0)

@@ -137,11 +137,11 @@ class SyncSheetCommand(CliCommand):
 
     def run(self, args: argparse.Namespace) -> int:
         try:
-            kept, skipped = GoogleSheetSync.from_settings().sync()
+            counts = GoogleSheetSync.from_settings().sync()
         except SheetSyncError as error:
             print(f"Sheet sync failed: {error}")
             return EXIT_FAILURE
-        print(f"Sheet updated: {kept} listings on Jobs, {skipped} on Skipped (with the reason).")
+        print(f"Sheet updated: {counts}.")
         return EXIT_SUCCESS
 
 

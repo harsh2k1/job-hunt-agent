@@ -135,8 +135,8 @@ class SheetSyncStep(DailyRunStep):
     def run(self) -> StepOutcome:
         if not self._settings.google_sheet.spreadsheet_url:
             return StepOutcome(self.name, True, "skipped: no spreadsheet_url set")
-        kept, skipped = GoogleSheetSync.from_settings(self._settings).sync()
-        return StepOutcome(self.name, True, f"{kept} listings on Jobs, {skipped} on Skipped")
+        counts = GoogleSheetSync.from_settings(self._settings).sync()
+        return StepOutcome(self.name, True, str(counts))
 
 
 class DailyRun:

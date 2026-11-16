@@ -1,4 +1,5 @@
 import json
+from dataclasses import dataclass
 
 import gspread
 
@@ -12,16 +13,19 @@ from job_hunt.job_store.models import ListingScreening, utc_now
 from job_hunt.job_store.screening_repository import ScreeningRepository
 from job_hunt.job_store.sponsor_repository import SponsorRepository
 from job_hunt.job_store.title_screening_repository import TitleScreeningRepository
-from job_hunt.sheet_sync.sheet_check import check_tab
+from job_hunt.sheet_sync.sheet_check import check_tab, check_verdicts
 from job_hunt.sheet_sync.sheet_format import format_tab
 from job_hunt.sheet_sync.sheet_rows import (
+    NOT_SCREENED,
     ScreenedListing,
     SheetColumn,
     SponsorStatusLookup,
+    UserCells,
     build_jobs_rows,
     build_skipped_rows,
     fit_of,
     jobs_columns,
+    merge_user_cells,
     read_user_cells,
     skipped_columns,
 )
@@ -31,6 +35,16 @@ logger = get_logger(__name__)
 
 class SheetSyncError(RuntimeError):
     pass
+
+
+@dataclass(frozen=True)
+class SheetCounts:
+    apply: int
+    check: int
+    skipped: int
+
+    def __str__(self) -> str:
+        return f"{self.apply} to apply on Jobs, {self.check} on To check, {self.skipped} on Skipped"
 
 
 class GoogleSheetSync:
@@ -55,7 +69,10 @@ class GoogleSheetSync:
     def from_settings(cls, settings: Settings = app_settings) -> "GoogleSheetSync":
         return cls(settings, JobRepository(), SponsorRepository(), ScreeningRepository())
 
-    def sync(self) -> tuple[int, int]:
+    # Jobs: only roles the candidate can apply to now ("apply"). To check:
+    # what the advert doesn't settle, and anything not screened yet, never
+    # mixed into Jobs. Skipped: everything else, with the reason.
+    def sync(self) -> SheetCounts:
         spreadsheet = self._open_spreadsheet()
         live = live_listings(self._settings, self._job_repository, TitleScreeningRepository(), utc_now())
         screenings = self._screening_repository.find(listing.key for listing in live.kept)
@@ -63,24 +80,42 @@ class GoogleSheetSync:
         def screening_of(listing: Listing) -> ListingScreening | None:
             return screenings.get(listing.key)
 
-        llm_skipped = [listing for listing in live.kept if fit_of(screening_of(listing)) == "skip"]
-        kept = [listing for listing in live.kept if fit_of(screening_of(listing)) != "skip"]
+        by_verdict: dict[str, list[Listing]] = {"apply": [], "check": [], "skip": []}
+        for listing in live.kept:
+            verdict = fit_of(screening_of(listing))
+            by_verdict["check" if verdict == NOT_SCREENED else verdict].append(listing)
         skipped = [ScreenedListing(listing, reason) for listing, reason in live.skipped] + [
-            ScreenedListing(listing, f"LLM: {screenings[listing.key].reason}") for listing in llm_skipped
+            ScreenedListing(listing, screenings[listing.key].reason) for listing in by_verdict["skip"]
         ]
 
         jobs_tab = self._worksheet(spreadsheet, self._sheet_settings.jobs_worksheet)
-        columns = jobs_columns(SponsorStatusLookup(self._sponsor_repository), screening_of)
-        user_cells = read_user_cells(jobs_tab.get_all_values())
-        self._rewrite(jobs_tab, build_jobs_rows(kept, columns, user_cells, screening_of), columns)
+        checks_tab = self._worksheet(spreadsheet, self._sheet_settings.checks_worksheet)
         skipped_tab = self._worksheet(spreadsheet, self._sheet_settings.skipped_worksheet)
-        self._rewrite(skipped_tab, build_skipped_rows(skipped), skipped_columns(lambda listing: ""))
+        columns = jobs_columns(SponsorStatusLookup(self._sponsor_repository), screening_of)
+        # the user's Status and Notes follow a listing between Jobs and To check
+        user_cells = merge_user_cells(
+            read_user_cells(jobs_tab.get_all_values()), read_user_cells(checks_tab.get_all_values())
+        )
+        self._rewrite(
+            jobs_tab, build_jobs_rows(by_verdict["apply"], columns, user_cells, screening_of), columns
+        )
+        checks = build_jobs_rows(by_verdict["check"], columns, UserCells(user_cells.by_key, []), screening_of)
+        self._rewrite(checks_tab, checks, columns)
+        skipped_columns_used = skipped_columns(lambda listing: "")
+        self._rewrite(skipped_tab, build_skipped_rows(skipped), skipped_columns_used)
         # read back what Google now shows, and fail loudly if it isn't right
-        problems = check_tab(jobs_tab, columns) + check_tab(skipped_tab, skipped_columns(lambda listing: ""))
+        problems = (
+            check_tab(jobs_tab, columns)
+            + check_tab(checks_tab, columns)
+            + check_tab(skipped_tab, skipped_columns_used)
+            + check_verdicts(jobs_tab, {"apply"})
+            + check_verdicts(checks_tab, {"check", NOT_SCREENED})
+        )
         if problems:
             raise SheetSyncError("the sheet doesn't look as it should: " + "; ".join(problems[:10]))
-        logger.info("sheet: %d listings on Jobs, %d on Skipped", len(kept), len(skipped))
-        return len(kept), len(skipped)
+        counts = SheetCounts(len(by_verdict["apply"]), len(by_verdict["check"]), len(skipped))
+        logger.info("sheet: %s", counts)
+        return counts
 
     @staticmethod
     def _rewrite(worksheet: gspread.Worksheet, rows: list[list[str]], columns: list[SheetColumn]) -> None:

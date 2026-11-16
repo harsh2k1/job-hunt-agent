@@ -643,6 +643,7 @@ default:
     enabled: true
     spreadsheet_url: null
     jobs_worksheet: Jobs
+    checks_worksheet: To check
     skipped_worksheet: Skipped
     listing_days: 14
     # set in .secrets.yaml

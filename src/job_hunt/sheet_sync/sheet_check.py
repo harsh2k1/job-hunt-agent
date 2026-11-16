@@ -81,3 +81,14 @@ def check_tab(worksheet: gspread.Worksheet, columns: list[SheetColumn]) -> list[
                 problems.append(f"{title}: advert link in row {row_number} isn't clickable")
                 break
     return problems
+
+
+# Every row's verdict, not a sample: a wrong row on Jobs is the one defect
+# that matters most.
+def check_verdicts(worksheet: gspread.Worksheet, allowed: set[str]) -> list[str]:
+    header = worksheet.row_values(1)
+    if "Verdict" not in header:
+        return [f"{worksheet.title}: no Verdict column"]
+    values = worksheet.col_values(header.index("Verdict") + 1)[1:]
+    wrong = sorted({value for value in values if value and value not in allowed})
+    return [f"{worksheet.title}: has rows with verdict {wrong}, allowed {sorted(allowed)}"] if wrong else []

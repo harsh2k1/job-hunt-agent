@@ -8,6 +8,7 @@ from job_hunt.sheet_sync.sheet_rows import (
     build_jobs_rows,
     build_skipped_rows,
     jobs_columns,
+    merge_user_cells,
     read_user_cells,
 )
 
@@ -73,3 +74,13 @@ def test_skipped_rows_are_numbered_and_carry_the_reason():
     rows = build_skipped_rows([ScreenedListing(listing("a", "Barista"), "title isn't a data / AI role")])
     assert rows[0][-2:] == ["Skip reason", KEY_COLUMN]
     assert rows[1][-2] == "title isn't a data / AI role"
+
+
+def test_notes_follow_a_listing_between_jobs_and_to_check():
+    jobs = read_user_cells([["Role", "Status", "Found by", KEY_COLUMN], ["Mine", "To apply", "self", ""]])
+    checks = read_user_cells(
+        [["Role", "Status", "Notes", KEY_COLUMN], ["Data Scientist", "Applied", "via Sam", "a"]]
+    )
+    merged = merge_user_cells(jobs, checks)
+    assert merged.by_key["a"]["Notes"] == "via Sam"
+    assert [row["Role"] for row in merged.own_rows] == ["Mine"]

@@ -22,7 +22,7 @@ LINK_COLUMN = "Advert link"
 MAX_CELL_CHARACTERS = 45_000
 FOUND_BY_AGENT = "agent"
 NOT_SCREENED = "not screened yet"
-# Jobs tab order: ready to apply first, then the ones to check
+# order within a tab: screened before not screened yet
 VERDICT_ORDER = {"apply": 0, "check": 1, NOT_SCREENED: 2}
 STATUS_CHOICES = ("To apply", "Applied", "Interviewing", "Offer", "Rejected", "Not interested")
 
@@ -152,6 +152,14 @@ class UserCells:
     by_key: dict[str, dict[str, str]]
     # rows the user added, header -> value, so they survive a layout change
     own_rows: list[dict[str, str]]
+
+
+def merge_user_cells(*tabs: UserCells) -> UserCells:
+    by_key: dict[str, dict[str, str]] = {}
+    for tab in tabs:
+        by_key.update(tab.by_key)
+    # own rows live on the first tab (Jobs) only
+    return UserCells(by_key, tabs[0].own_rows if tabs else [])
 
 
 def read_user_cells(existing_rows: list[list[str]]) -> UserCells:
