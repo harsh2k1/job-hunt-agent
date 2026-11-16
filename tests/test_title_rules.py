@@ -16,7 +16,6 @@ RULES = TitleRules(settings.title_rules)
         "BI Developer",
         "Marketing Data Analyst",
         "ML Platform Engineer",
-        "Quant Trader",
         "AI Consultant",
         "Research Engineer",
         "Applied Scientist, Prime Video",
@@ -38,6 +37,10 @@ def test_relevant_titles_are_always_kept(title):
         "Software Engineer",
         "Senior Software Engineer, Secure Build",
         "Sales Associate",
+        # finance, not data: a quant or actuarial title alone doesn't keep it
+        "Quant Trader",
+        "Actuarial Graduate Programme 2027",
+        "Investment Banking Summer Associate",
         "Pharmacist - 30 hours",
         "Tax Graduate - London - September 2027",
         "Graduate Rail Civil Engineer - Swindon (2027 start)",

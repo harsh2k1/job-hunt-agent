@@ -63,7 +63,7 @@ def screen_live_listings(settings: Settings = app_settings) -> FullScreeningRepo
     )
     kept = live_listings(settings, job_repository, title_repository, now).kept
     screening_repository = ScreeningRepository()
-    advert_report = LlmScreening(settings.llm_screening, llm_client, screening_repository).screen(kept)
+    advert_report = LlmScreening(settings.llm_screening, llm_client, screening_repository, rules).screen(kept)
     # studentships, fellowships and freelance gigs told apart
     kind_report = KindRefiner(settings.llm_screening, llm_client, screening_repository).refine(kept)
     # only where sponsorship would decide the verdict: does the role end in time?

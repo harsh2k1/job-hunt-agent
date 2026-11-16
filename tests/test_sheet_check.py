@@ -5,7 +5,7 @@ import copy
 import pytest
 
 from job_hunt.job_pipeline.final_verdict import FinalVerdict
-from job_hunt.sheet_sync.sheet_check import check_tab
+from job_hunt.sheet_sync.sheet_check import check_choices, check_tab
 from job_hunt.sheet_sync.sheet_format import FROZEN_COLUMNS, body_row_pixels
 from job_hunt.sheet_sync.sheet_rows import LINK_COLUMN, jobs_columns
 
@@ -19,7 +19,7 @@ def good_cell(column, row_number: int) -> dict:
             "wrapStrategy": "WRAP" if column.wraps else "CLIP",
         }
     }
-    if column.header == "Status":
+    if column.choices:
         cell["dataValidation"] = {"condition": {"type": "ONE_OF_LIST"}}
     if column.header == LINK_COLUMN:
         cell.update(
@@ -79,6 +79,10 @@ def leave_dropdown_on_why(metadata):
     cell(metadata, 2, "Why")["dataValidation"] = {"condition": {"type": "ONE_OF_LIST"}}
 
 
+def drop_the_kind_dropdown(metadata):
+    del cell(metadata, 1, "Kind")["dataValidation"]
+
+
 def unlink_an_advert(metadata):
     del cell(metadata, 3, LINK_COLUMN)["hyperlink"]
 
@@ -96,7 +100,8 @@ def swap_two_headers(metadata):
     "defect, expected",
     [
         (break_role_alignment, "'Role' row 2 is aligned CENTER"),
-        (leave_dropdown_on_why, "'Why' row 3 has a dropdown rule"),
+        (leave_dropdown_on_why, "'Why' row 3 dropdown is True"),
+        (drop_the_kind_dropdown, "'Kind' row 2 dropdown is False"),
         (unlink_an_advert, "advert link in row 4 isn't clickable"),
         (swap_two_headers, "headers are"),
         (clip_the_bullets, "'Why it's valid' row 2 wraps as CLIP"),
@@ -107,3 +112,15 @@ def test_each_defect_the_sheet_has_had_is_caught(defect, expected):
     defect(metadata)
     problems = check_tab(FakeWorksheet(metadata), COLUMNS)
     assert any(expected in problem for problem in problems), problems
+
+
+def test_a_value_outside_a_columns_dropdown_is_caught_but_the_users_status_is_free():
+    header = [column.header for column in COLUMNS]
+    row = [""] * len(COLUMNS)
+    row[header.index("Kind")] = "graduate"
+    row[header.index("Status")] = "Waiting to hear back"
+    assert check_choices("Jobs", [header, row], COLUMNS) == []
+    row[header.index("Kind")] = "Graduate scheme"
+    assert check_choices("Jobs", [header, row], COLUMNS) == [
+        "Jobs: 'Kind' has values outside its dropdown: ['Graduate scheme']"
+    ]

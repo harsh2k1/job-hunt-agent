@@ -2,7 +2,8 @@
 fellowships, freelance gigs), so the rules can tell them apart: freelance
 or contract work isn't open to someone on a student visa, a studentship
 isn't a job, and an employed fellowship is treated like any full-time role.
-Only "other" listings are asked about, and the answer replaces the kind.
+Only "other" listings are asked about, and the answer replaces the kind;
+they're few, so the stronger model answers.
 
 Such work is often expert work for training AI (a lawyer or an HR partner
 "AI trainer"), which the advert read takes for an AI role; here its field
@@ -30,7 +31,8 @@ KIND_PROMPT_TEMPLATE = (
     "grant; 'employed' = a salaried job, including a fellowship or fixed-term employment.\n"
     "expertise: the expertise the work itself asks for, in a few words (for AI-training work, the "
     "subject the trainer must know, e.g. 'corporate law', not 'AI').\n"
-    "related: true only if that expertise is one of: {relevant_fields}."
+    "related: true if that expertise is one of: {relevant_fields}. With no advert text, judge both "
+    "from the title."
 )
 REFINED_KIND = {"freelance": "freelance", "studentship": "studentship", "employed": "full-time"}
 
@@ -40,7 +42,8 @@ class KindAnswer(BaseModel):
 
     id: str = Field(description="the listing id exactly as given")
     engagement: Literal["freelance", "studentship", "employed"]
-    expertise: str = Field(description="a few words")
+    # never empty: a blank answer can't justify hiding a listing
+    expertise: str = Field(min_length=2, description="a few words")
     related: bool
 
 
@@ -84,7 +87,7 @@ class KindRefiner:
             )
             try:
                 reply = self._llm_client.ask(
-                    f"Listings:\n{lines}", KindReply, self._prompt, self._settings.first_pass_model
+                    f"Listings:\n{lines}", KindReply, self._prompt, self._settings.second_pass_model
                 )
             except LlmUsageLimitError as error:
                 logger.warning("kind refinement stopped: %s", error)

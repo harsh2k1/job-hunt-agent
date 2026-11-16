@@ -395,9 +395,6 @@ default:
       - computer vision
       - deep learning
       - python
-      - quant
-      - quants
-      - quantitative
       - insight
       - insights
       - bi
@@ -409,7 +406,6 @@ default:
       - algorithm
       - algorithms
       - econometrics
-      - actuarial
       - modelling
       - modeller
       - fraud
@@ -417,6 +413,13 @@ default:
       - research
     drop_terms:
       - statistician
+      - actuarial
+      - actuary
+      - trader
+      - investment banking
+      - equity research
+      - underwriter
+      - underwriting
       - pharmacist
       - pharmacy
       - nurse
@@ -633,7 +636,6 @@ default:
       - MLOps
       - Python development
       - machine learning or AI research
-      - quantitative research
       - fraud, risk or financial-crime analytics
 
   # The job list in a Google Sheet, rewritten after every run. Status and

@@ -23,7 +23,27 @@ MAX_CELL_CHARACTERS = 45_000
 FOUND_BY_AGENT = "agent"
 # order within a tab: screened before not screened yet
 VERDICT_ORDER = {"apply": 0, "check": 1, NOT_SCREENED: 2}
-STATUS_CHOICES = ("To apply", "Applied", "Interviewing", "Offer", "Rejected", "Not interested")
+# Columns with fixed values: each value and its pastel colour (named in
+# sheet_format.PASTELS). Such a column gets a dropdown and colour rules.
+STATUS_CHOICES = {
+    "To apply": "blue", "Applied": "purple", "Interviewing": "orange", "Offer": "green",
+    "Rejected": "red", "Not interested": "grey",
+}  # fmt: skip
+KIND_CHOICES = {
+    "graduate": "green", "internship": "blue", "part-time": "teal", "full-time": "orange",
+    "freelance": "red", "studentship": "purple", "other": "grey",
+}  # fmt: skip
+FOUND_BY_CHOICES = {FOUND_BY_AGENT: "blue", "self": "purple"}
+SPONSORSHIP_CHOICES = {"offered": "green", "not offered": "red", "not stated": "grey"}
+# the sponsor register lookup, in words: whether the employer is on the
+# Home Office register of licensed sponsors, by the same or a similar name
+LICENCE_LABELS = {
+    "exact": "On register (same name)",
+    "possible": "On register? (similar name)",
+    "not found": "Not on register",
+}
+LICENCE_CHOICES = dict(zip(LICENCE_LABELS.values(), ("green", "yellow", "red"), strict=True))
+VERDICT_CHOICES = {"apply": "green", "check": "yellow", NOT_SCREENED: "grey"}
 
 ScreeningOf = Callable[[Listing], ListingScreening | None]
 VerdictOf = Callable[[Listing], FinalVerdict]
@@ -41,6 +61,8 @@ class SheetColumn:
     # shown in full over several lines (bullets); every other column is one
     # clipped line
     wraps: bool = False
+    # fixed values -> colour name: a dropdown and colour coding
+    choices: dict[str, str] | None = None
 
     @property
     def belongs_to_user(self) -> bool:
@@ -79,21 +101,33 @@ def jobs_columns(
         SheetColumn("Role", 300, lambda listing: listing.primary.title),
         SheetColumn("Company", 180, lambda listing: listing.primary.company_name),
         # the user's column, kept in view next to what the job is
-        SheetColumn("Status", 120, centred=True),
+        SheetColumn("Status", 120, centred=True, choices=STATUS_CHOICES),
         SheetColumn(LINK_COLUMN, 260, lambda listing: listing.primary.url),
         SheetColumn(
             "Why it's valid", 330, lambda listing: verdict_of(listing).valid_because or "", wraps=True
         ),
         SheetColumn("JD", 260, lambda listing: (listing.primary.description or "")[:MAX_CELL_CHARACTERS]),
         SheetColumn("Location", 160, lambda listing: listing.primary.location or ""),
-        SheetColumn("Kind", 100, screened(lambda screening: screening.kind), centred=True),
+        SheetColumn(
+            "Kind", 100, screened(lambda screening: screening.kind), centred=True, choices=KIND_CHOICES
+        ),
         SheetColumn("Type", 150, lambda listing: listing.primary.employment_type or ""),
         SheetColumn("Found on", 170, lambda listing: ", ".join(listing.sources)),
-        SheetColumn("Found by", 80, lambda listing: FOUND_BY_AGENT, centred=True),
+        SheetColumn("Found by", 80, lambda listing: FOUND_BY_AGENT, centred=True, choices=FOUND_BY_CHOICES),
         # facts: visa and dates
-        SheetColumn("Sponsorship in advert", 140, screened(lambda screening: screening.sponsorship), True),
         SheetColumn(
-            "Sponsor licence", 110, lambda listing: sponsor_status(listing.primary.company_name), True
+            "Sponsorship in advert",
+            140,
+            screened(lambda screening: screening.sponsorship),
+            centred=True,
+            choices=SPONSORSHIP_CHOICES,
+        ),
+        SheetColumn(
+            "Sponsor licence",
+            190,
+            lambda listing: LICENCE_LABELS.get(sponsor_status(listing.primary.company_name), ""),
+            centred=True,
+            choices=LICENCE_CHOICES,
         ),
         SheetColumn("Closes", 95, lambda listing: _date(listing.closes_at), centred=True),
         SheetColumn("Start", 120, screened(lambda screening: screening.start_date)),
@@ -101,7 +135,9 @@ def jobs_columns(
         SheetColumn("First fetched", 105, lambda listing: _date(_first_fetched(listing)), centred=True),
         # derived: pay, the screening's verdict, then the user's columns
         SheetColumn("Salary", 150, lambda listing: listing.primary.salary_text or ""),
-        SheetColumn("Verdict", 90, lambda listing: verdict_of(listing).verdict, centred=True),
+        SheetColumn(
+            "Verdict", 110, lambda listing: verdict_of(listing).verdict, centred=True, choices=VERDICT_CHOICES
+        ),
         SheetColumn("Why", 320, lambda listing: verdict_of(listing).reason),
         SheetColumn("Notes", 220),
         SheetColumn(KEY_COLUMN, 60),

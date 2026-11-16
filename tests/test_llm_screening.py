@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from job_hunt.common.settings import settings
 from job_hunt.job_pipeline.listings import Listing
 from job_hunt.job_pipeline.llm_screening import ListingFacts, LlmScreening, ScreeningReply, decide
+from job_hunt.job_pipeline.title_rules import TitleRules
 from job_hunt.job_store.models import StoredJob
 from job_hunt.job_store.screening_repository import ScreeningRepository
 from job_hunt.llm.llm_client import LlmClient, LlmError, LlmUsageLimitError
@@ -97,7 +98,9 @@ def make_screening(database, llm, **overrides) -> LlmScreening:
     screening_settings = settings.llm_screening.model_copy(
         update={"first_pass_model": "haiku", "second_pass_model": "sonnet", "batch_size": 2, **overrides}
     )
-    return LlmScreening(screening_settings, llm, ScreeningRepository(database))
+    return LlmScreening(
+        screening_settings, llm, ScreeningRepository(database), TitleRules(settings.title_rules)
+    )
 
 
 def stored(database, key):
@@ -132,7 +135,7 @@ def test_a_listing_is_sent_once_until_its_advert_changes(database):
     assert len(llm.calls) == 2
 
 
-def test_only_unclear_fields_with_advert_text_go_to_the_stronger_model(database):
+def test_only_unclear_fields_go_to_the_stronger_model(database):
     llm = FakeLlm()
     listings = [
         listing("a", "Data Scientist"),
@@ -140,10 +143,11 @@ def test_only_unclear_fields_with_advert_text_go_to_the_stronger_model(database)
         listing("c", "thin advert", None),
     ]
     report = make_screening(database, llm, batch_size=10).screen(listings)
-    assert llm.calls == [("haiku", 3), ("sonnet", 1)]
-    assert report.sent_to_second_pass == 1
+    # a title-only listing is re-read too: the stronger model settles most from the title
+    assert llm.calls == [("haiku", 3), ("sonnet", 2)]
+    assert report.sent_to_second_pass == 2
     assert (stored(database, "b").fit, stored(database, "b").model) == ("apply", "sonnet")
-    assert (stored(database, "c").fit, stored(database, "c").model) == ("check", "haiku")
+    assert (stored(database, "c").fit, stored(database, "c").model) == ("apply", "sonnet")
 
 
 def test_the_cap_leaves_the_rest_for_the_next_run(database):
@@ -184,3 +188,14 @@ def test_the_model_is_told_what_the_rule_found_and_never_sees_a_profile(database
     )
     assert '"sponsorship_in_text": "offered"' in llm.prompts[0]
     assert "Candidate" not in llm.prompts[0]
+
+
+def test_unrelated_with_a_data_or_ai_title_is_double_checked_by_the_stronger_model(database):
+    # the fake calls every 'Engineer' unrelated, on both models
+    llm = FakeLlm()
+    make_screening(database, llm, batch_size=10).screen(
+        [listing("ai", "AI Engineer"), listing("swe", "Software Engineer")]
+    )
+    # 'AI' is a keep term: a second look; plain 'Software Engineer' isn't
+    assert llm.calls == [("haiku", 2), ("sonnet", 1)]
+    assert stored(database, "ai").model == "sonnet"

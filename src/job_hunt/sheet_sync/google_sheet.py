@@ -15,7 +15,7 @@ from job_hunt.job_store.models import ListingScreening, utc_now
 from job_hunt.job_store.screening_repository import ScreeningRepository
 from job_hunt.job_store.sponsor_repository import SponsorRepository
 from job_hunt.job_store.title_screening_repository import TitleScreeningRepository
-from job_hunt.sheet_sync.sheet_check import check_tab, check_verdicts
+from job_hunt.sheet_sync.sheet_check import check_choices, check_tab, check_tab_order, check_verdicts
 from job_hunt.sheet_sync.sheet_format import format_tab
 from job_hunt.sheet_sync.sheet_rows import (
     ScreenedListing,
@@ -112,13 +112,27 @@ class GoogleSheetSync:
         user_cells = merge_user_cells(
             read_user_cells(jobs_tab.get_all_values()), read_user_cells(checks_tab.get_all_values())
         )
-        self._rewrite(
-            jobs_tab, build_jobs_rows(by_verdict["apply"], columns, user_cells, verdict_of), columns
-        )
+        jobs = build_jobs_rows(by_verdict["apply"], columns, user_cells, verdict_of)
         checks = build_jobs_rows(by_verdict["check"], columns, UserCells(user_cells.by_key, []), verdict_of)
-        self._rewrite(checks_tab, checks, columns)
         skipped_columns_used = skipped_columns(lambda listing: "")
-        self._rewrite(skipped_tab, build_skipped_rows(skipped), skipped_columns_used)
+        skipped_rows = build_skipped_rows(skipped)
+        # a value outside a column's dropdown is a defect: nothing is written
+        stray = (
+            check_choices(jobs_tab.title, jobs, columns)
+            + check_choices(checks_tab.title, checks, columns)
+            + check_choices(skipped_tab.title, skipped_rows, skipped_columns_used)
+        )
+        if stray:
+            raise SheetSyncError("; ".join(stray))
+        self._rewrite(jobs_tab, jobs, columns)
+        self._rewrite(checks_tab, checks, columns)
+        self._rewrite(skipped_tab, skipped_rows, skipped_columns_used)
+        # Jobs, then To check, then Skipped, ahead of any tab of the user's
+        ours = [jobs_tab, checks_tab, skipped_tab]
+        tab_titles = [tab.title for tab in ours]
+        spreadsheet.reorder_worksheets(
+            ours + [tab for tab in spreadsheet.worksheets() if tab.title not in tab_titles]
+        )
         # read back what Google now shows, and fail loudly if it isn't right
         problems = (
             check_tab(jobs_tab, columns)
@@ -126,6 +140,7 @@ class GoogleSheetSync:
             + check_tab(skipped_tab, skipped_columns_used)
             + check_verdicts(jobs_tab, {"apply"})
             + check_verdicts(checks_tab, {"check", NOT_SCREENED})
+            + check_tab_order(spreadsheet, tab_titles)
         )
         if problems:
             raise SheetSyncError("the sheet doesn't look as it should: " + "; ".join(problems[:10]))

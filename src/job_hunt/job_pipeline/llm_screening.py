@@ -10,7 +10,9 @@ of fit, level or experience: the candidate decides that.
 Token use is kept down: only listings without a current verdict are sent,
 in batches, as a digest of the advert (its opening plus every line about
 visas, start dates and hours). The cheap model reads everything; the
-stronger one only re-reads adverts whose field it couldn't tell. Verdicts
+stronger one only re-reads listings whose field it couldn't tell, and those
+it called unrelated although their title names data or AI work (so a
+relevant role is dropped only when both models agree). Verdicts
 are stored, so a listing is sent again only when its advert changes.
 """
 
@@ -27,6 +29,7 @@ from job_hunt.common.settings_schema import LlmScreeningSettings
 from job_hunt.job_pipeline.advert_facts import advert_digest, sponsorship_in_advert
 from job_hunt.job_pipeline.eligibility import RoleKind, StartsWhenFree, eligibility
 from job_hunt.job_pipeline.listings import Listing
+from job_hunt.job_pipeline.title_rules import TitleRules
 from job_hunt.job_store.models import ListingScreening, utc_now
 from job_hunt.job_store.screening_repository import ScreeningRepository
 from job_hunt.llm.llm_client import LlmClient, LlmError, LlmUsageLimitError
@@ -34,7 +37,7 @@ from job_hunt.llm.llm_client import LlmClient, LlmError, LlmUsageLimitError
 logger = get_logger(__name__)
 
 # part of every content hash: a change to what's asked re-screens everything
-PROMPT_VERSION = "6"
+PROMPT_VERSION = "8"
 
 APPLY, CHECK, SKIP = "apply", "check", "skip"
 # how an unrelated role's reason starts; such roles aren't shown at all
@@ -46,9 +49,18 @@ SYSTEM_PROMPT_TEMPLATE = (
     "the candidate is a good fit, and never consider experience or seniority. Be brief.\n"
     "role_field: the role's field in a few words, e.g. 'data science', 'ML engineering', 'software "
     "engineering', 'sales'.\n"
-    "related: 'yes' if the role's day-to-day work involves any of: {relevant_fields}; 'no' only if it "
-    "plainly involves none of them (e.g. general software engineering, sales, retail, operations); "
-    "'unclear' if the text is too thin to tell. When in doubt, 'yes'.\n"
+    "related: is the role's main day-to-day work one of: {relevant_fields}? 'yes' if it plainly is, "
+    "whatever the industry or employer (e.g. AI engineering in healthcare, data consulting, customer or "
+    "marketing analytics, ML at a bank). "
+    "'no' if its main work is something else, even when that work uses data, models or AI tools: e.g. "
+    "investment banking, equity or investment research, trading, quant trading or strats, actuarial, "
+    "underwriting, accounting, audit, economics, policy or regulation, consulting that isn't data or AI "
+    "work, sales, "
+    "marketing, HR, legal, operations, general software engineering, engineering disciplines (civil, "
+    "hydraulic, electrical, mechanical, traffic modelling), natural sciences, and test or placeholder "
+    "postings. 'unclear' only when the work could well be one of those fields but the text doesn't say "
+    "(e.g. a technology graduate scheme that may include data roles, or a bare 'Analyst' title at a "
+    "data company).\n"
     "kind: graduate = a graduate scheme or programme, or a role advertised for new / recent / upcoming "
     "graduates or early careers; internship = an internship, placement, spring week or insight programme; "
     "part-time = a part-time job that isn't an internship; full-time = any other permanent or fixed-term "
@@ -137,9 +149,14 @@ class ScreeningRunReport:
 
 class LlmScreening:
     def __init__(
-        self, screening_settings: LlmScreeningSettings, llm_client: LlmClient, repository: ScreeningRepository
+        self,
+        screening_settings: LlmScreeningSettings,
+        llm_client: LlmClient,
+        repository: ScreeningRepository,
+        title_rules: TitleRules,
     ):
         self._settings = screening_settings
+        self._title_rules = title_rules
         self._llm_client = llm_client
         self._repository = repository
         self._system_prompt = SYSTEM_PROMPT_TEMPLATE.format(
@@ -160,16 +177,13 @@ class LlmScreening:
         facts: dict[str, tuple[ListingFacts, str]] = {}
         try:
             self._run_pass(batch_listings, self._settings.first_pass_model, report, facts)
-            # the stronger model only helps where there's advert text to read
-            unclear = [
+            doubtful = [
                 listing
                 for listing in batch_listings
-                if listing.key in facts
-                and facts[listing.key][0].related == "unclear"
-                and listing.primary.description
+                if listing.key in facts and self._needs_second_look(listing, facts[listing.key][0])
             ]
-            report.sent_to_second_pass = len(unclear)
-            self._run_pass(unclear, self._settings.second_pass_model, report, facts)
+            report.sent_to_second_pass = len(doubtful)
+            self._run_pass(doubtful, self._settings.second_pass_model, report, facts)
         except LlmUsageLimitError as error:
             logger.warning("LLM screening stopped: %s", error)
             report.stopped_by_usage_limit = True
@@ -178,6 +192,12 @@ class LlmScreening:
             verdict = decide(listing_facts).verdict
             report.verdicts[verdict] = report.verdicts.get(verdict, 0) + 1
         return report
+
+    # every unclear field, and every "unrelated" whose title names data or AI work
+    def _needs_second_look(self, listing: Listing, listing_facts: ListingFacts) -> bool:
+        return listing_facts.related == "unclear" or (
+            listing_facts.related == "no" and self._title_rules.rule(listing.primary.title) == "keep"
+        )
 
     def _is_due(self, listing: Listing, stored: ListingScreening | None) -> bool:
         return stored is None or stored.content_hash != self._content_hash(listing)

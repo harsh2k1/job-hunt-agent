@@ -63,7 +63,7 @@ def test_an_employer_off_the_register_is_checked_not_listed():
 def test_a_valid_role_says_how_sponsorship_is_covered():
     verdict = final_verdict(screening(), "exact", VISA_ENDS)
     assert verdict.verdict == "apply"
-    assert verdict.valid_because.endswith("• Employer holds a sponsor licence (exact match on the register)")
+    assert verdict.valid_because.endswith("• Employer is on the sponsor register (same name)")
     offered = final_verdict(screening(sponsorship="offered"), "not found", VISA_ENDS)
     assert offered.valid_because.endswith("• Advert offers visa sponsorship")
 

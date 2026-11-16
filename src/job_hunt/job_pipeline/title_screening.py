@@ -21,7 +21,11 @@ TITLE_PROMPT_TEMPLATE = (
     "related = false only when the title plainly names a job with none of them (e.g. pharmacist, barista, "
     "sales associate, nurse, software engineer with nothing about data, ML or AI). Natural-science, "
     "medical and engineering-trade roles (biologist, chemist, geotechnical engineer) are unrelated unless "
-    "the title names data, ML or AI. When in doubt, true. "
+    "the title names data, ML or AI; so are finance and banking roles (investment banking, trading, equity "
+    "research, actuarial, audit, wealth management) unless the title names data, ML or AI. A title "
+    "that names no field (e.g. 'Technology Graduate Programme', 'Summer Intern 2027', 'Technical "
+    "Graduate', 'Applied Science Intern', 'Member of Technical Staff', 'General application', "
+    "'Postdoctoral Fellow') is true: its advert decides. When in doubt, true. "
     "Judge the title only; never consider seniority or experience."
 )
 

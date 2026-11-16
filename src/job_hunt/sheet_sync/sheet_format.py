@@ -1,21 +1,28 @@
 """How a tab looks: column widths, a dark header, clipped fixed-height
-rows, banding, filters, frozen panes, a coloured Fit column and a Status
-dropdown. Applied in one batch request per sync; anything a previous sync
-added (colour rules, banding) is removed first, so nothing piles up."""
+rows, banding, filters, frozen panes, and a dropdown with pastel colours on
+every column with fixed values (Status, Kind, Verdict, ...). Applied in
+one batch request per sync; anything a previous sync added (colour rules,
+banding) is removed first, so nothing piles up."""
 
 from typing import Any
 
 import gspread
 
-from job_hunt.sheet_sync.sheet_rows import KEY_COLUMN, LINK_COLUMN, STATUS_CHOICES, SheetColumn
+from job_hunt.sheet_sync.sheet_rows import KEY_COLUMN, LINK_COLUMN, SheetColumn
 
 HEADER_BACKGROUND = {"red": 0.17, "green": 0.24, "blue": 0.36}
 WHITE = {"red": 1, "green": 1, "blue": 1}
 BAND_GREY = {"red": 0.96, "green": 0.97, "blue": 0.98}
-VERDICT_COLOURS = {
-    "apply": {"red": 0.72, "green": 0.88, "blue": 0.75},
-    "check": {"red": 1.0, "green": 0.95, "blue": 0.8},
-    "not screened yet": {"red": 0.93, "green": 0.93, "blue": 0.93},
+# light enough that the text on them stays easy to read
+PASTELS = {
+    "green": {"red": 0.85, "green": 0.94, "blue": 0.86},
+    "yellow": {"red": 1.0, "green": 0.95, "blue": 0.78},
+    "orange": {"red": 1.0, "green": 0.89, "blue": 0.8},
+    "red": {"red": 0.98, "green": 0.85, "blue": 0.85},
+    "blue": {"red": 0.84, "green": 0.9, "blue": 0.98},
+    "teal": {"red": 0.82, "green": 0.94, "blue": 0.93},
+    "purple": {"red": 0.91, "green": 0.87, "blue": 0.97},
+    "grey": {"red": 0.92, "green": 0.92, "blue": 0.92},
 }
 HEADER_ROW_PIXELS = 34
 BODY_ROW_PIXELS = 24
@@ -47,13 +54,12 @@ def format_tab(worksheet: gspread.Worksheet, columns: list[SheetColumn], rows: l
             "wrapStrategy": "WRAP" if column.wraps else "CLIP",
         }
         requests.append(_cells(sheet_id, 1, row_count, index, index + 1, layout))
+        if column.choices:
+            requests.append(_dropdown(sheet_id, index, row_count, column.choices))
+            requests += _choice_colours(sheet_id, index, row_count, column.choices)
     headers = [column.header for column in columns]
-    if "Verdict" in headers:
-        requests += _verdict_colours(sheet_id, headers.index("Verdict"), row_count)
     if LINK_COLUMN in headers:
         requests.append(_clickable_links(sheet_id, headers.index(LINK_COLUMN), rows))
-    if "Status" in headers:
-        requests.append(_status_dropdown(sheet_id, headers.index("Status"), row_count))
     worksheet.spreadsheet.batch_update({"requests": requests})
 
 
@@ -182,33 +188,36 @@ def _banding(sheet_id: int, row_count: int, column_count: int) -> dict[str, Any]
     }
 
 
-def _verdict_colours(sheet_id: int, column: int, row_count: int) -> list[dict[str, Any]]:
+def _choice_colours(
+    sheet_id: int, column: int, row_count: int, choices: dict[str, str]
+) -> list[dict[str, Any]]:
     return [
         {
             "addConditionalFormatRule": {
                 "rule": {
                     "ranges": [_range(sheet_id, 1, row_count, column, column + 1)],
                     "booleanRule": {
-                        "condition": {"type": "TEXT_EQ", "values": [{"userEnteredValue": verdict}]},
-                        "format": {"backgroundColor": colour, "textFormat": {"bold": verdict == "apply"}},
+                        "condition": {"type": "TEXT_EQ", "values": [{"userEnteredValue": value}]},
+                        "format": {"backgroundColor": PASTELS[colour]},
                     },
                 },
                 "index": 0,
             }
         }
-        for verdict, colour in VERDICT_COLOURS.items()
+        for value, colour in choices.items()
     ]
 
 
-# a dropdown, but any other wording is still allowed
-def _status_dropdown(sheet_id: int, column: int, row_count: int) -> dict[str, Any]:
+# a dropdown of the column's values; other wording is still allowed (the
+# user's Status), it's only flagged
+def _dropdown(sheet_id: int, column: int, row_count: int, choices: dict[str, str]) -> dict[str, Any]:
     return {
         "setDataValidation": {
             "range": _range(sheet_id, 1, row_count, column, column + 1),
             "rule": {
                 "condition": {
                     "type": "ONE_OF_LIST",
-                    "values": [{"userEnteredValue": choice} for choice in STATUS_CHOICES],
+                    "values": [{"userEnteredValue": value} for value in choices],
                 },
                 "strict": False,
                 "showCustomUi": True,

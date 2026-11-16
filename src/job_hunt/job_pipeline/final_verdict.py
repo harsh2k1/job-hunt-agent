@@ -12,6 +12,7 @@ from job_hunt.job_pipeline.llm_screening import UNCLEAR_FIELD_REASON, UNRELATED_
 from job_hunt.job_store.models import ListingScreening
 
 NOT_SCREENED = "not screened yet"
+REGISTER_MATCH = {"exact": "same name", "possible": "similar name: check it's them"}
 # related to nothing the candidate does: not shown on any tab
 UNRELATED = "unrelated"
 
@@ -60,5 +61,5 @@ def _bullets(screening: ListingScreening, timing_basis: str, visa_basis: str, li
         elif screening.sponsorship == "offered":
             bullets.append("Advert offers visa sponsorship")
         else:
-            bullets.append(f"Employer holds a sponsor licence ({licence} match on the register)")
+            bullets.append(f"Employer is on the sponsor register ({REGISTER_MATCH.get(licence, licence)})")
     return "\n".join(f"• {bullet}" for bullet in bullets if bullet)
