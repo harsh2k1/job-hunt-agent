@@ -10,7 +10,10 @@ if it starts once they're free.
 from dataclasses import dataclass
 from typing import Literal
 
-RoleKind = Literal["graduate", "internship", "part-time", "full-time", "other"]
+# "other" is what the advert read gives studentships, fellowships and
+# freelance work; a second look splits it into freelance / studentship /
+# full-time (an employed fellowship), see kind_refinement.py
+RoleKind = Literal["graduate", "internship", "part-time", "full-time", "other", "freelance", "studentship"]
 # does the advert's start fall on or after the date the candidate is free?
 StartsWhenFree = Literal["yes", "no", "not stated"]
 
@@ -26,6 +29,11 @@ class Eligibility:
 
 
 def eligibility(kind: RoleKind, part_time: bool, starts_when_free: StartsWhenFree) -> Eligibility:
+    if kind == "studentship":
+        return Eligibility(False, "studentship, not a job")
+    # a student visa doesn't allow self-employment; the Graduate visa does
+    if kind == "freelance" and starts_when_free != "yes":
+        return Eligibility(False, "freelance or contract work, which your student visa doesn't allow")
     if part_time or kind == "part-time":
         return Eligibility(True, basis="Part-time role, open to you now")
     if kind == "graduate":

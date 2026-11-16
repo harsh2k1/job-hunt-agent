@@ -2,6 +2,7 @@ from dataclasses import dataclass
 
 from job_hunt.common.settings import settings as app_settings
 from job_hunt.common.settings_schema import Settings
+from job_hunt.job_pipeline.kind_refinement import KindRefinementReport, KindRefiner
 from job_hunt.job_pipeline.live_listings import live_listings
 from job_hunt.job_pipeline.llm_screening import LlmScreening, ScreeningRunReport
 from job_hunt.job_pipeline.role_length import RoleLengthReader, RoleLengthReport
@@ -20,6 +21,7 @@ from job_hunt.llm.llm_client_factory import LlmClientFactory
 class FullScreeningReport:
     titles: TitleScreeningReport
     adverts: ScreeningRunReport
+    kinds: KindRefinementReport
     lengths: RoleLengthReport
 
     @property
@@ -29,6 +31,8 @@ class FullScreeningReport:
             or self.titles.stopped_by_usage_limit
             or self.adverts.failed_batches
             or self.adverts.stopped_by_usage_limit
+            or self.kinds.failed_batches
+            or self.kinds.stopped_by_usage_limit
             or self.lengths.failed_batches
             or self.lengths.stopped_by_usage_limit
         )
@@ -38,6 +42,7 @@ class FullScreeningReport:
             f"titles: {self.titles.titles_asked} asked, {self.titles.unrelated} unrelated"
             + (f", {self.titles.failed_batches} batches failed" if self.titles.failed_batches else "")
             + f"; adverts: {self.adverts.summary()}"
+            + f"; kind refined: {self.kinds.asked}"
             + f"; role length: {self.lengths.asked} asked, "
             + f"{self.lengths.ending_in_time} end before the visa does"
         )
@@ -59,8 +64,10 @@ def screen_live_listings(settings: Settings = app_settings) -> FullScreeningRepo
     kept = live_listings(settings, job_repository, title_repository, now).kept
     screening_repository = ScreeningRepository()
     advert_report = LlmScreening(settings.llm_screening, llm_client, screening_repository).screen(kept)
+    # studentships, fellowships and freelance gigs told apart
+    kind_report = KindRefiner(settings.llm_screening, llm_client, screening_repository).refine(kept)
     # only where sponsorship would decide the verdict: does the role end in time?
     length_report = RoleLengthReader(settings.llm_screening, llm_client, screening_repository).read(
         kept, SponsorStatusLookup(SponsorRepository())
     )
-    return FullScreeningReport(title_report, advert_report, length_report)
+    return FullScreeningReport(title_report, advert_report, kind_report, length_report)

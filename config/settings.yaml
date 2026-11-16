@@ -398,9 +398,6 @@ default:
       - quant
       - quants
       - quantitative
-      - statistician
-      - statistics
-      - statistical
       - insight
       - insights
       - bi
@@ -419,6 +416,7 @@ default:
       - risk analytics
       - research
     drop_terms:
+      - statistician
       - pharmacist
       - pharmacy
       - nurse

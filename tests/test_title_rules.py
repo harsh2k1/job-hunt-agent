@@ -33,6 +33,8 @@ def test_relevant_titles_are_always_kept(title):
     "title",
     [
         "Computational Biologist",
+        "Statistician",
+        "HR Manager",
         "Software Engineer",
         "Senior Software Engineer, Secure Build",
         "Sales Associate",

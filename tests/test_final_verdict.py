@@ -68,16 +68,44 @@ def test_a_valid_role_says_how_sponsorship_is_covered():
     assert offered.valid_because.endswith("• Advert offers visa sponsorship")
 
 
-def test_earlier_skips_and_checks_stand():
-    assert (
-        final_verdict(screening(fit="skip", reason="Not a related role (sales)"), "exact", VISA_ENDS).verdict
-        == "skip"
+def test_the_verdict_is_worked_out_from_the_stored_facts():
+    # unrelated roles aren't shown anywhere; related ones ruled out on timing are, on Skipped
+    unrelated = screening(fit="skip", reason="Not a related role (sales)")
+    assert final_verdict(unrelated, "exact", VISA_ENDS).verdict == "unrelated"
+    timing = screening(kind="full-time", starts_when_free="no")
+    assert final_verdict(timing, "exact", VISA_ENDS).reason == (
+        "Not applicable: full-time role, not starting once you're free full-time"
     )
-    assert (
-        final_verdict(screening(fit="check", reason="Internship: confirm"), "exact", VISA_ENDS).verdict
-        == "check"
+    internship = final_verdict(
+        screening(kind="internship", starts_when_free="not stated"), "exact", VISA_ENDS
     )
+    assert internship.verdict == "check"
+    unclear = screening(fit="check", reason="The advert doesn't say enough to tell the role's field")
+    assert final_verdict(unclear, "exact", VISA_ENDS).verdict == "check"
     assert final_verdict(None, "exact", VISA_ENDS).verdict == "not screened yet"
+
+
+@pytest.mark.parametrize(
+    "kind, part_time, starts_when_free, reason",
+    [
+        # AI-trainer gigs: self-employment isn't allowed on a student visa
+        (
+            "freelance", True, "not stated",
+            "Not applicable: freelance or contract work, which your student visa doesn't allow",
+        ),
+        ("studentship", False, "yes", "Not applicable: studentship, not a job"),
+    ],
+)  # fmt: skip
+def test_freelance_gigs_and_studentships_are_skipped(kind, part_time, starts_when_free, reason):
+    result = final_verdict(
+        screening(kind=kind, part_time=part_time, starts_when_free=starts_when_free), "exact", VISA_ENDS
+    )
+    assert (result.verdict, result.reason) == ("skip", reason)
+
+
+def test_a_freelance_role_starting_once_free_is_open_on_the_graduate_visa():
+    result = final_verdict(screening(kind="freelance", starts_when_free="yes"), "exact", VISA_ENDS)
+    assert result.verdict == "apply"
 
 
 @pytest.mark.parametrize(

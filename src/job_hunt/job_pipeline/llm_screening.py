@@ -37,6 +37,9 @@ logger = get_logger(__name__)
 PROMPT_VERSION = "6"
 
 APPLY, CHECK, SKIP = "apply", "check", "skip"
+# how an unrelated role's reason starts; such roles aren't shown at all
+UNRELATED_REASON = "Not a related role"
+UNCLEAR_FIELD_REASON = "The advert doesn't say enough to tell the role's field"
 
 SYSTEM_PROMPT_TEMPLATE = (
     "You read UK job listings and report facts from each listing's text only. Never judge whether "
@@ -93,12 +96,12 @@ class Decision:
 # kind and start says the candidate can't take it.
 def decide(facts: ListingFacts) -> Decision:
     if facts.related == "no":
-        return Decision(SKIP, f"Not a related role ({facts.role_field})", None)
+        return Decision(SKIP, f"{UNRELATED_REASON} ({facts.role_field})", None)
     rule = eligibility(facts.kind, facts.part_time, facts.starts_when_free)
     if rule.eligible is False:
         return Decision(SKIP, f"Not applicable: {rule.reason}", None)
     if facts.related == "unclear":
-        return Decision(CHECK, "The advert doesn't say enough to tell the role's field", None)
+        return Decision(CHECK, UNCLEAR_FIELD_REASON, None)
     if rule.eligible is None:
         return Decision(CHECK, rule.reason[0].upper() + rule.reason[1:], None)
     bullets = [rule.basis, f"{facts.role_field[0].upper()}{facts.role_field[1:]} role"]

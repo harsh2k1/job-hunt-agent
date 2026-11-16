@@ -6,7 +6,7 @@ import gspread
 from job_hunt.common.logger import get_logger
 from job_hunt.common.settings import settings as app_settings
 from job_hunt.common.settings_schema import Settings
-from job_hunt.job_pipeline.final_verdict import NOT_SCREENED, FinalVerdict, final_verdict
+from job_hunt.job_pipeline.final_verdict import NOT_SCREENED, UNRELATED, FinalVerdict, final_verdict
 from job_hunt.job_pipeline.listings import Listing
 from job_hunt.job_pipeline.live_listings import live_listings
 from job_hunt.job_pipeline.sponsor_status import SponsorStatusLookup
@@ -41,9 +41,14 @@ class SheetCounts:
     apply: int
     check: int
     skipped: int
+    # unrelated or closed: remembered, not shown
+    hidden: int
 
     def __str__(self) -> str:
-        return f"{self.apply} to apply on Jobs, {self.check} on To check, {self.skipped} on Skipped"
+        return (
+            f"{self.apply} to apply on Jobs, {self.check} on To check, {self.skipped} on Skipped "
+            f"(related but not open to you); {self.hidden} unrelated or closed, not shown"
+        )
 
 
 class GoogleSheetSync:
@@ -91,13 +96,13 @@ class GoogleSheetSync:
         def verdict_of(listing: Listing) -> FinalVerdict:
             return verdicts[listing.key]
 
-        by_verdict: dict[str, list[Listing]] = {"apply": [], "check": [], "skip": []}
+        by_verdict: dict[str, list[Listing]] = {"apply": [], "check": [], "skip": [], UNRELATED: []}
         for listing in live.kept:
             verdict = verdict_of(listing).verdict
             by_verdict["check" if verdict == NOT_SCREENED else verdict].append(listing)
-        skipped = [ScreenedListing(listing, reason) for listing, reason in live.skipped] + [
-            ScreenedListing(listing, verdict_of(listing).reason) for listing in by_verdict["skip"]
-        ]
+        # Skipped holds only related roles the candidate can't take, so wrong
+        # skips can be spotted; unrelated and closed listings aren't shown
+        skipped = [ScreenedListing(listing, verdict_of(listing).reason) for listing in by_verdict["skip"]]
 
         jobs_tab = self._worksheet(spreadsheet, self._sheet_settings.jobs_worksheet)
         checks_tab = self._worksheet(spreadsheet, self._sheet_settings.checks_worksheet)
@@ -124,7 +129,12 @@ class GoogleSheetSync:
         )
         if problems:
             raise SheetSyncError("the sheet doesn't look as it should: " + "; ".join(problems[:10]))
-        counts = SheetCounts(len(by_verdict["apply"]), len(by_verdict["check"]), len(skipped))
+        counts = SheetCounts(
+            len(by_verdict["apply"]),
+            len(by_verdict["check"]),
+            len(skipped),
+            hidden=len(live.skipped) + len(by_verdict[UNRELATED]),
+        )
         logger.info("sheet: %s", counts)
         return counts
 
