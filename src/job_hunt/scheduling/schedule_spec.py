@@ -1,5 +1,5 @@
 """What the user chose with `job-hunt schedule set`: when the run happens
-each day, and what happens around sleep. Kept in the state folder and read
+each day, and whether a run missed while the computer slept still happens. Kept in the state folder and read
 by every check, so changing the times needs nothing else reinstalled."""
 
 import re
@@ -21,11 +21,9 @@ class ScheduleSpec(BaseModel):
     frequency: Frequency = "daily"
     # local wall-clock times, sorted, no repeats
     times: tuple[time, ...] = Field(min_length=1)
-    # --run-on-wake: a slot missed while the Mac slept or was off runs as soon
-    # as it's back; otherwise it's skipped
+    # --run-on-wake: a slot missed while the computer slept or was off runs
+    # as soon as it's back; otherwise it's skipped
     catch_up: bool
-    # the Mac is woken shortly before each slot
-    wake: bool
     # when the schedule was set: earlier slots never count as missed
     active_since: datetime
 

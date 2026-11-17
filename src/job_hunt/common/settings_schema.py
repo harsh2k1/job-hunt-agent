@@ -393,8 +393,17 @@ class LaunchdSchedulingSettings(StrictModel):
         return value.expanduser()
 
 
+class SystemdSchedulingSettings(StrictModel):
+    unit_name: str = Field(pattern=r"^[A-Za-z0-9_.-]+$")
+
+
+class TaskSchedulerSchedulingSettings(StrictModel):
+    folder: str = Field(pattern=r"^[A-Za-z0-9_ -]+$")
+
+
 class SchedulingSettings(StrictModel):
-    backend: Literal["launchd"]
+    # auto picks the one for this operating system
+    backend: Literal["auto", "launchd", "systemd", "task_scheduler"]
     state_dir: Path
     log_dir: Path
     check_interval_minutes: int = Field(ge=1, le=60)
@@ -402,9 +411,9 @@ class SchedulingSettings(StrictModel):
     internet_wait_seconds: int = Field(ge=0)
     run_time_limit_minutes: int = Field(ge=1)
     attempts_per_slot: int = Field(ge=1)
-    wake_minutes_before: int = Field(ge=0, le=30)
-    wake_days_ahead: int = Field(ge=1, le=365)
     launchd: LaunchdSchedulingSettings
+    systemd: SystemdSchedulingSettings
+    task_scheduler: TaskSchedulerSchedulingSettings
 
 
 class Settings(StrictModel):

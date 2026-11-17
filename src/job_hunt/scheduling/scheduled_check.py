@@ -4,13 +4,14 @@ checks find nothing due and end at once; when a slot is due it:
 1. takes a lock, so a slow run and the next check never overlap;
 2. waits for the internet (after a wake Wi-Fi can lag; if it isn't back,
    the slot stays due for the next check);
-3. claims the due slots, then runs `job-hunt run` with the machine kept
-   awake and a wall-clock time limit (a hung call can't hold the lock for
+3. claims the due slots, then runs `job-hunt run` with the PATH saved when
+   the schedule was set, the computer kept from sleeping, and a wall-clock
+   time limit (a hung call can't hold the lock for
    days; time asleep counts, unlike Python's own timeouts);
 4. gives the slots back for a retry if the run fails, and shows a notification.
 """
 
-import fcntl
+import os
 import re
 import subprocess
 import time
@@ -24,6 +25,7 @@ import httpx
 
 from job_hunt.common.logger import get_logger
 from job_hunt.common.settings_schema import SchedulingSettings
+from job_hunt.scheduling.file_lock import exclusive_lock
 from job_hunt.scheduling.schedule_backend import ScheduleBackend
 from job_hunt.scheduling.schedule_store import ScheduleStore
 from job_hunt.scheduling.slots import SlotHistory, due_slots, slot_id
@@ -37,8 +39,6 @@ SECONDS_BETWEEN_POLLS = 15
 SECONDS_TO_STOP = 30
 # a run that outlives its limit
 EXIT_TIMED_OUT = 142
-# remind to book more wakes when fewer days than this are left
-WAKE_REMINDER_DAYS = 7
 # `job-hunt run` prints "ok      <step>  <summary>" or "FAILED  <step>  <summary>"
 _STEP_LINE = re.compile(r"^(ok|FAILED)\s+(.+?)(?:\s{2,}(.*))?$")
 
@@ -101,12 +101,13 @@ def run_with_time_limit(
     command: list[str],
     limit_seconds: float,
     log_path: Path,
+    env: dict[str, str] | None = None,
     wall_clock: Callable[[], float] = time.time,
     poll_seconds: float = SECONDS_BETWEEN_POLLS,
 ) -> RunResult:
     start = log_path.stat().st_size if log_path.exists() else 0
     with log_path.open("a") as log:
-        process = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT)
+        process = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT, env=env)
         deadline = wall_clock() + limit_seconds
         exit_code = None
         while (exit_code := process.poll()) is None:
@@ -134,7 +135,7 @@ class ScheduledCheck:
         run_command: list[str],
         clock: Callable[[], datetime] = datetime.now,
         online: Callable[[], bool] = internet_is_up,
-        run: Callable[[list[str], float, Path], RunResult] = run_with_time_limit,
+        run: Callable[[list[str], float, Path, dict[str, str]], RunResult] = run_with_time_limit,
         sleep: Callable[[float], None] = time.sleep,
     ):
         self._settings = settings
@@ -153,13 +154,9 @@ class ScheduledCheck:
         history = self._store.load_history()
         grace = timedelta(minutes=self._settings.on_time_grace_minutes)
         if not due_slots(spec, self._clock(), history, grace):
-            self._remind_to_book_wakes(spec.wake, history)
             return CheckOutcome.NOTHING_DUE
-        self._store.state_dir.mkdir(parents=True, exist_ok=True)
-        with (self._store.state_dir / LOCK_FILE).open("w") as lock:
-            try:
-                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            except BlockingIOError:
+        with exclusive_lock(self._store.state_dir / LOCK_FILE) as locked:
+            if not locked:
                 return CheckOutcome.BUSY
             if not self._wait_for_internet():
                 self._log("no internet yet; the slot stays due for the next check")
@@ -178,10 +175,9 @@ class ScheduledCheck:
         self._store.save_history(history)
         slots = ", ".join(slot_id(slot) for slot in due)
         self._log(f"run started for {slots}")
+        limit = self._settings.run_time_limit_minutes * 60
         with self._backend.keep_awake():
-            result = self._run(
-                self._run_command, self._settings.run_time_limit_minutes * 60, self._log_path()
-            )
+            result = self._run(self._run_command, limit, self._log_path(), self._run_environment())
         if result.succeeded:
             self._log(f"run finished: {result.summary()}")
             self._backend.notify("Job hunt", f"Run finished: {result.summary()}")
@@ -203,20 +199,10 @@ class ScheduledCheck:
                 self._sleep(SECONDS_BETWEEN_CONNECTIVITY_TRIES)
         return False
 
-    # once a day, when the booked wakes are about to run out
-    def _remind_to_book_wakes(self, wake: bool, history: SlotHistory) -> None:
-        now = self._clock()
-        today = now.date().isoformat()
-        if not wake or history.wake_reminder_day == today:
-            return
-        booked_until = self._backend.wakes_booked_until(now)
-        if booked_until is not None and booked_until - now > timedelta(days=WAKE_REMINDER_DAYS):
-            return
-        history.wake_reminder_day = today
-        self._store.save_history(history)
-        self._backend.notify(
-            "Job hunt", "Booked wakes run out soon: run `job-hunt schedule renew` in Terminal."
-        )
+    # this environment, with the saved folders first on PATH
+    def _run_environment(self) -> dict[str, str]:
+        folders = [*self._store.load_run_path(), *os.environ.get("PATH", "").split(os.pathsep)]
+        return {**os.environ, "PATH": os.pathsep.join(dict.fromkeys(folder for folder in folders if folder))}
 
     def _log_path(self) -> Path:
         self._settings.log_dir.mkdir(parents=True, exist_ok=True)

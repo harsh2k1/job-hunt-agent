@@ -1,6 +1,7 @@
-import fcntl
+import os
 import plistlib
 import sys
+import xml.etree.ElementTree as ElementTree
 from contextlib import contextmanager
 from datetime import datetime, time, timedelta
 from pathlib import Path
@@ -8,8 +9,9 @@ from pathlib import Path
 import pytest
 
 from job_hunt.common.settings import settings
-from job_hunt.scheduling.launchd_backend import app_source, launch_agent_plist, pmset_commands, wake_times
-from job_hunt.scheduling.schedule_backend import ScheduleBackend
+from job_hunt.scheduling.file_lock import exclusive_lock
+from job_hunt.scheduling.launchd_backend import app_source, launch_agent_plist
+from job_hunt.scheduling.schedule_backend import ScheduleBackend, ScheduleBackendError, backend_name
 from job_hunt.scheduling.schedule_spec import InvalidTimeError, ScheduleSpec, evenly_spaced, parse_clock_time
 from job_hunt.scheduling.schedule_store import ScheduleStore
 from job_hunt.scheduling.scheduled_check import (
@@ -23,17 +25,17 @@ from job_hunt.scheduling.scheduled_check import (
     run_with_time_limit,
 )
 from job_hunt.scheduling.slots import SlotHistory, due_slots
+from job_hunt.scheduling.systemd_backend import service_unit, systemd_command_line, timer_unit
+from job_hunt.scheduling.task_scheduler_backend import task_xml
 
 GRACE = timedelta(minutes=15)
 SET_ON = datetime(2026, 11, 17, 12, 0)
+TASK_NS = {"t": "http://schemas.microsoft.com/windows/2004/02/mit/task"}
 
 
-def spec(*times: str, catch_up: bool = True, wake: bool = False) -> ScheduleSpec:
+def spec(*times: str, catch_up: bool = False) -> ScheduleSpec:
     return ScheduleSpec(
-        times=tuple(parse_clock_time(text) for text in times),
-        catch_up=catch_up,
-        wake=wake,
-        active_since=SET_ON,
+        times=tuple(parse_clock_time(text) for text in times), catch_up=catch_up, active_since=SET_ON
     )
 
 
@@ -56,9 +58,7 @@ def test_runs_per_day_are_spread_evenly_from_the_first():
     assert evenly_spaced(3, time(3)) == (time(3), time(11), time(19))
     # past midnight wraps round; the schedule keeps them in clock order
     assert evenly_spaced(2, time(21)) == (time(21), time(9))
-    assert ScheduleSpec(
-        times=evenly_spaced(2, time(21)), catch_up=True, wake=False, active_since=SET_ON
-    ).times == (
+    assert ScheduleSpec(times=evenly_spaced(2, time(21)), catch_up=False, active_since=SET_ON).times == (
         time(9),
         time(21),
     )
@@ -72,14 +72,9 @@ def test_a_slot_is_due_once_its_time_comes():
     ]
 
 
-def test_with_catch_up_a_slot_missed_asleep_runs_on_waking_even_the_next_morning():
-    # asleep from 20:30 to 08:10: last night's 21:00 and this morning's 03:00 are both due, in one run
-    due = due_slots(spec("03:00", "21:00"), datetime(2026, 11, 18, 8, 10), SlotHistory(), GRACE)
-    assert due == [datetime(2026, 11, 17, 21), datetime(2026, 11, 18, 3)]
-
-
-def test_without_catch_up_a_missed_slot_is_skipped_but_a_check_a_little_late_still_runs_it():
-    schedule = spec("03:00", catch_up=False)
+def test_by_default_a_slot_missed_asleep_is_skipped_but_a_check_a_little_late_still_runs_it():
+    schedule = spec("03:00")
+    # woke at 08:10: 03:00 is skipped
     assert due_slots(schedule, datetime(2026, 11, 18, 8, 10), SlotHistory(), GRACE) == []
     # the first check after 03:00 can come a few minutes late
     assert due_slots(schedule, datetime(2026, 11, 18, 3, 4), SlotHistory(), GRACE) == [
@@ -87,12 +82,20 @@ def test_without_catch_up_a_missed_slot_is_skipped_but_a_check_a_little_late_sti
     ]
 
 
+def test_with_run_on_wake_a_slot_missed_asleep_runs_on_waking_even_the_next_morning():
+    # asleep from 20:30 to 08:10: last night's 21:00 and this morning's 03:00 are both due, in one run
+    due = due_slots(
+        spec("03:00", "21:00", catch_up=True), datetime(2026, 11, 18, 8, 10), SlotHistory(), GRACE
+    )
+    assert due == [datetime(2026, 11, 17, 21), datetime(2026, 11, 18, 3)]
+
+
 def test_slots_already_run_or_before_the_schedule_was_set_are_not_due():
     # set at 12:00 on the 17th: that morning's 03:00 never counts as missed
-    assert due_slots(spec("03:00"), datetime(2026, 11, 17, 12, 30), SlotHistory(), GRACE) == []
+    assert due_slots(spec("03:00", catch_up=True), datetime(2026, 11, 17, 12, 30), SlotHistory(), GRACE) == []
     history = SlotHistory()
     history.claim([datetime(2026, 11, 18, 3)])
-    assert due_slots(spec("03:00"), datetime(2026, 11, 18, 9), history, GRACE) == []
+    assert due_slots(spec("03:00", catch_up=True), datetime(2026, 11, 18, 9), history, GRACE) == []
 
 
 def test_a_failed_slot_is_retried_until_its_attempts_run_out():
@@ -105,36 +108,46 @@ def test_a_failed_slot_is_retried_until_its_attempts_run_out():
     assert "2026-11-18 03:00" in history.claimed
 
 
-def test_the_store_keeps_the_schedule_and_history(tmp_path):
+def test_the_store_keeps_the_schedule_history_and_run_path(tmp_path):
     store = ScheduleStore(tmp_path)
-    store.save_spec(spec("03:00", "9pm", wake=True))
-    assert store.load_spec() == spec("03:00", "21:00", wake=True)
+    store.save_spec(spec("03:00", "9pm", catch_up=True))
+    assert store.load_spec() == spec("03:00", "21:00", catch_up=True)
     history = SlotHistory(attempts={"2026-11-18 03:00": 1})
     history.claim([datetime(2026, 11, 18, 3)])
     store.save_history(history)
     assert store.load_history() == history
+    store.save_run_path(["/venv/bin", "/opt/homebrew/bin"])
+    assert store.load_run_path() == ["/venv/bin", "/opt/homebrew/bin"]
+
+
+@pytest.mark.parametrize(
+    "platform, backend", [("darwin", "launchd"), ("linux", "systemd"), ("win32", "task_scheduler")]
+)
+def test_auto_picks_the_scheduler_of_each_system(platform, backend):
+    assert backend_name(settings.scheduling.model_copy(update={"backend": "auto"}), platform) == backend
+
+
+def test_an_unknown_system_is_told_to_choose_a_backend():
+    with pytest.raises(ScheduleBackendError):
+        backend_name(settings.scheduling.model_copy(update={"backend": "auto"}), "aix")
 
 
 class FakeBackend(ScheduleBackend):
     name = "fake"
 
-    def __init__(self, store, wakes_until=None):
+    def __init__(self, store):
         super().__init__(settings.scheduling, store)
         self.notes: list[str] = []
         self.awake = False
-        self._wakes_until = wakes_until
 
-    def install(self, check_command, path_dirs, spec, now):
+    def install(self, check_command):
         return []
 
     def uninstall(self):
-        return []
+        return None
 
-    def describe(self, now):
+    def describe(self):
         return []
-
-    def wakes_booked_until(self, now):
-        return self._wakes_until
 
     @contextmanager
     def keep_awake(self):
@@ -150,32 +163,48 @@ class FakeRun:
     def __init__(self, exit_code=0):
         self.calls = 0
         self.exit_code = exit_code
+        self.backend: FakeBackend | None = None
+        self.awake_during: list[bool] = []
+        self.paths: list[str] = []
 
-    def __call__(self, command, limit_seconds, log_path):
+    def __call__(self, command, limit_seconds, log_path, env):
         self.calls += 1
+        self.paths.append(env["PATH"])
+        if self.backend:
+            self.awake_during.append(self.backend.awake)
         return RunResult(self.exit_code, [StepLine(True, "fetch", "40 sources, 900 jobs (23 new)")])
 
 
-def make_check(tmp_path, now, run, online=lambda: True, schedule=None, backend=None):
+def make_check(tmp_path, now, run, online=lambda: True, schedule=None):
     store = ScheduleStore(tmp_path / "state")
     store.save_spec(schedule or spec("03:00"))
     scheduling = settings.scheduling.model_copy(
         update={"state_dir": tmp_path / "state", "log_dir": tmp_path / "logs"}
     )
-    backend = backend or FakeBackend(store)
+    backend = FakeBackend(store)
+    run.backend = backend
     check = ScheduledCheck(scheduling, store, backend, ["job-hunt", "run"], clock=lambda: now, online=online,
                            run=run, sleep=lambda seconds: None)  # fmt: skip
     return check, store, backend
 
 
-def test_a_due_slot_runs_once_and_says_what_it_found(tmp_path):
+def test_a_due_slot_runs_once_kept_awake_and_says_what_it_found(tmp_path):
     run = FakeRun()
     check, store, backend = make_check(tmp_path, datetime(2026, 11, 18, 3, 2), run)
     assert check.check() is CheckOutcome.RAN
     assert check.check() is CheckOutcome.NOTHING_DUE
     assert run.calls == 1
+    assert run.awake_during == [True] and backend.awake is False
     assert backend.notes == ["Run finished: 23 new jobs; every step ok"]
     assert "run finished: 23 new jobs" in (tmp_path / "logs" / "2026-11-18.log").read_text()
+
+
+def test_the_run_gets_the_path_saved_when_the_schedule_was_set(tmp_path):
+    run = FakeRun()
+    check, store, _ = make_check(tmp_path, datetime(2026, 11, 18, 3, 2), run)
+    store.save_run_path(["/venv/bin", "/opt/homebrew/bin"])
+    check.check()
+    assert run.paths[0].split(os.pathsep)[:2] == ["/venv/bin", "/opt/homebrew/bin"]
 
 
 def test_a_failed_run_is_retried_at_the_next_check(tmp_path):
@@ -200,36 +229,13 @@ def test_without_internet_the_slot_stays_due(tmp_path):
 
 def test_a_check_while_a_run_is_in_progress_leaves_it_alone(tmp_path):
     run = FakeRun()
-    check, store, _ = make_check(tmp_path, datetime(2026, 11, 18, 3, 2), run)
-    (tmp_path / "state").mkdir(exist_ok=True)
-    with (tmp_path / "state" / LOCK_FILE).open("w") as held:
-        fcntl.flock(held, fcntl.LOCK_EX)
+    check, _, _ = make_check(tmp_path, datetime(2026, 11, 18, 3, 2), run)
+    with exclusive_lock(tmp_path / "state" / LOCK_FILE) as held:
+        assert held
         assert check.check() is CheckOutcome.BUSY
     assert run.calls == 0
-
-
-def test_the_machine_is_kept_awake_during_the_run(tmp_path):
-    seen = []
-
-    class AwakeRun(FakeRun):
-        def __call__(self, command, limit_seconds, log_path):
-            seen.append(backend_ref.awake)
-            return super().__call__(command, limit_seconds, log_path)
-
-    check, _, backend_ref = make_check(tmp_path, datetime(2026, 11, 18, 3, 2), AwakeRun())
-    check.check()
-    assert seen == [True] and backend_ref.awake is False
-
-
-def test_a_reminder_comes_once_a_day_when_booked_wakes_run_low(tmp_path):
-    store = ScheduleStore(tmp_path / "state")
-    backend = FakeBackend(store, wakes_until=datetime(2026, 11, 20))
-    check, _, _ = make_check(
-        tmp_path, datetime(2026, 11, 17, 13), FakeRun(), schedule=spec("03:00", wake=True), backend=backend
-    )
-    check.check()
-    check.check()
-    assert backend.notes == ["Booked wakes run out soon: run `job-hunt schedule renew` in Terminal."]
+    # released when the holder lets go
+    assert check.check() is CheckOutcome.RAN
 
 
 def test_step_lines_from_the_daily_run_are_read():
@@ -261,39 +267,51 @@ def test_a_run_that_outlives_its_wall_clock_limit_is_stopped(tmp_path):
     assert result.exit_code == EXIT_TIMED_OUT
 
 
-def test_a_run_s_output_goes_to_the_log_and_its_steps_are_read(tmp_path):
+def test_a_runs_output_goes_to_the_log_and_only_its_own_steps_are_read(tmp_path):
     log = tmp_path / "run.log"
     log.write_text("earlier run\nok      fetch                    old (99 new)\n")
     script = "print('ok      fetch                    40 sources, 900 jobs (5 new)')"
     result = run_with_time_limit([sys.executable, "-c", script], 60, log, poll_seconds=0.05)
     assert result.exit_code == 0
-    # only this run's lines count
     assert result.summary() == "5 new jobs; every step ok"
     assert "earlier run" in log.read_text()
 
 
-def test_the_app_runs_the_check_with_a_quoted_path():
-    source = app_source(
-        ["/Users/me/My venv/bin/python", "-m", "job_hunt", "schedule", "check"], ["/Users/me/My venv/bin"]
-    )
+def test_macos_the_app_runs_the_check_with_quoted_paths():
+    source = app_source(["/Users/me/My venv/bin/python", "-m", "job_hunt", "schedule", "check"])
     assert source == (
-        "do shell script \"export PATH='/Users/me/My venv/bin'; "
-        "'/Users/me/My venv/bin/python' -m job_hunt schedule check >/dev/null 2>&1\"\n"
+        "do shell script \"'/Users/me/My venv/bin/python' -m job_hunt schedule check >/dev/null 2>&1\"\n"
     )
 
 
-def test_the_launch_agent_checks_every_interval_and_at_login():
+def test_macos_the_launch_agent_checks_every_interval_and_at_login():
     plist = plistlib.loads(launch_agent_plist("com.jobhunt.test", Path("/Apps/Sched.app"), 5, Path("/logs")))
     assert plist["ProgramArguments"] == ["/Apps/Sched.app/Contents/MacOS/applet"]
     assert (plist["StartInterval"], plist["RunAtLoad"]) == (300, True)
 
 
-def test_wakes_are_booked_shortly_before_each_future_slot():
-    wakes = wake_times(spec("03:00", "21:00"), datetime(2026, 11, 17, 12), days_ahead=1, minutes_before=2)
-    assert wakes == [
-        datetime(2026, 11, 17, 20, 58),
-        datetime(2026, 11, 18, 2, 58),
-        datetime(2026, 11, 18, 20, 58),
-    ]
-    assert pmset_commands("book", wakes[:1]) == ["pmset schedule wake '11/17/26 20:58:00' job-hunt"]
-    assert pmset_commands("cancel", wakes[:1]) == ["pmset schedule cancel wake '11/17/26 20:58:00' job-hunt"]
+def test_linux_the_timer_checks_every_interval_catches_up_after_suspend_and_never_wakes():
+    timer = timer_unit(5)
+    assert "OnCalendar=*:0/5\n" in timer and "Persistent=true\n" in timer
+    assert "WakeSystem" not in timer
+    service = service_unit(
+        ["/home/me/my venv/bin/python", "-m", "job_hunt", "schedule", "check"], Path("/logs")
+    )
+    assert 'ExecStart="/home/me/my venv/bin/python" "-m" "job_hunt" "schedule" "check"\n' in service
+    assert "StandardOutput=append:/logs/systemd.log\n" in service
+
+
+def test_linux_a_percent_or_quote_in_a_command_is_kept_literal():
+    assert systemd_command_line(["/opt/100%/python", 'say "hi"']) == '"/opt/100%%/python" "say \\"hi\\""'
+
+
+def test_windows_the_task_repeats_runs_after_a_missed_start_and_never_wakes_the_pc():
+    # read as Task Scheduler reads it: UTF-16
+    xml = task_xml([r"C:\Users\me\venv\Scripts\pythonw.exe", "-m", "job_hunt", "schedule", "check"], 5)
+    root = ElementTree.fromstring(xml.encode("utf-16"))
+    assert root.findtext(".//t:Repetition/t:Interval", namespaces=TASK_NS) == "PT5M"
+    assert root.find(".//t:LogonTrigger", TASK_NS) is not None
+    assert root.findtext(".//t:StartWhenAvailable", namespaces=TASK_NS) == "true"
+    assert root.findtext(".//t:WakeToRun", namespaces=TASK_NS) == "false"
+    assert root.findtext(".//t:Exec/t:Command", namespaces=TASK_NS) == r"C:\Users\me\venv\Scripts\pythonw.exe"
+    assert root.findtext(".//t:Exec/t:Arguments", namespaces=TASK_NS) == "-m job_hunt schedule check"

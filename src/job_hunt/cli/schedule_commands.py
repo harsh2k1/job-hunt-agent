@@ -1,4 +1,5 @@
 import argparse
+import os
 import shutil
 import sys
 from datetime import datetime, timedelta
@@ -31,13 +32,13 @@ CHECK_COMMAND = [sys.executable, "-m", "job_hunt", "schedule", "check"]
 @register_cli_command
 class ScheduleCommand(CliCommand):
     name = "schedule"
-    summary = "run the daily job hunt automatically at set times (set / status / renew / off)"
+    summary = "run the daily job hunt automatically at set times (set / status / off)"
 
     def add_arguments(self, parser: argparse.ArgumentParser) -> None:
         actions = parser.add_subparsers(dest="action", required=True, metavar="<action>")
         set_parser = actions.add_parser(
             "set",
-            help="choose when it runs, and what happens if the Mac is asleep then",
+            help="choose when it runs, and whether a run missed while the computer slept still happens",
             description="e.g. `job-hunt schedule set --at 3am --at 9pm` or "
             "`job-hunt schedule set --times-per-day 3 --first 03:00` (03:00, 11:00, 19:00).",
         )
@@ -63,34 +64,26 @@ class ScheduleCommand(CliCommand):
             default="daily",
             help="how often the times repeat (default daily)",
         )
-        # both off unless asked for: a run missed while the Mac slept is skipped
+        # off unless asked for: a run missed while the computer slept is skipped.
+        # The computer is never woken for a run.
         set_parser.add_argument(
             "--run-on-wake",
             action="store_true",
-            help="a run missed while the Mac slept or was off happens as soon as it's back "
+            help="a run missed while the computer slept or was off happens as soon as it's back "
             "(without this it's skipped)",
         )
-        set_parser.add_argument(
-            "--wake-mac",
-            action="store_true",
-            help="wake the Mac from sleep for each run; needs your admin password once, and the charger "
-            "if the lid is closed",
-        )
-        actions.add_parser("status", help="the schedule, what's next, and the last runs")
-        actions.add_parser("renew", help="set up again from the saved schedule (books more wakes)")
-        actions.add_parser("off", help="stop the scheduled runs and cancel booked wakes")
+        actions.add_parser("status", help="the schedule, what's due, and the last runs")
+        actions.add_parser("off", help="stop the scheduled runs")
         actions.add_parser(
             "check", help="what the scheduler runs every few minutes: run a slot if one is due"
         )
 
     def run(self, args: argparse.Namespace) -> int:
         store = ScheduleStore(settings.scheduling.state_dir)
-        backend = create_schedule_backend(settings.scheduling, store)
         try:
+            backend = create_schedule_backend(settings.scheduling, store)
             if args.action == "set":
                 return self._set(args, store, backend)
-            if args.action == "renew":
-                return self._renew(store, backend)
             if args.action == "off":
                 return self._off(store, backend)
             if args.action == "status":
@@ -112,24 +105,11 @@ class ScheduleCommand(CliCommand):
             print(error)
             return EXIT_FAILURE
         spec = ScheduleSpec(
-            frequency=args.frequency,
-            times=times,
-            catch_up=args.run_on_wake,
-            wake=args.wake_mac,
-            active_since=datetime.now(),
+            frequency=args.frequency, times=times, catch_up=args.run_on_wake, active_since=datetime.now()
         )
         store.save_spec(spec)
-        return self._install(spec, backend)
-
-    def _renew(self, store: ScheduleStore, backend: ScheduleBackend) -> int:
-        spec = store.load_spec()
-        if spec is None:
-            print("Nothing scheduled yet: use `job-hunt schedule set`.")
-            return EXIT_FAILURE
-        return self._install(spec, backend)
-
-    def _install(self, spec: ScheduleSpec, backend: ScheduleBackend) -> int:
-        notes = backend.install(CHECK_COMMAND, _tool_dirs(), spec, datetime.now())
+        store.save_run_path(_run_path())
+        notes = backend.install(CHECK_COMMAND)
         print(f"Scheduled: job-hunt run, {spec.describe()}.")
         print(_sleep_rules(spec))
         for note in notes:
@@ -138,11 +118,9 @@ class ScheduleCommand(CliCommand):
         return EXIT_SUCCESS
 
     def _off(self, store: ScheduleStore, backend: ScheduleBackend) -> int:
-        notes = backend.uninstall()
+        backend.uninstall()
         store.remove_spec()
         print("Scheduled runs are off.")
-        for note in notes:
-            print(note)
         return EXIT_SUCCESS
 
     def _status(self, store: ScheduleStore, backend: ScheduleBackend) -> int:
@@ -162,7 +140,7 @@ class ScheduleCommand(CliCommand):
                 )
             recent = sorted(history.claimed)[-5:]
             print("Recent slots run: " + (", ".join(recent) if recent else "none yet"))
-        for line in backend.describe(datetime.now()):
+        for line in backend.describe():
             print(line)
         print(f"Logs: {settings.scheduling.log_dir}")
         return EXIT_SUCCESS
@@ -173,16 +151,13 @@ def _grace() -> timedelta:
 
 
 def _sleep_rules(spec: ScheduleSpec) -> str:
-    catch_up = (
-        "a run missed while the Mac slept or was off happens as soon as it's back"
-        if spec.catch_up
-        else "a run missed while the Mac slept or was off is skipped"
-    )
-    wake = "the Mac is woken for each run" if spec.wake else "the Mac isn't woken for runs"
-    return f"  {catch_up}; {wake}."
+    missed = "happens as soon as it's back" if spec.catch_up else "is skipped (--run-on-wake to run it)"
+    return f"  A run missed while the computer slept or was off {missed}. The computer is never woken."
 
 
-# folders the run's tools live in: this Python's (job-hunt) and the claude CLI's
-def _tool_dirs() -> list[str]:
+# what the run's PATH starts with: this Python's folder (job-hunt), the
+# claude CLI's, then the PATH of the terminal the schedule was set from
+def _run_path() -> list[str]:
     claude = shutil.which(settings.llm.claude_cli_binary)
-    return [str(Path(sys.executable).parent)] + ([str(Path(claude).parent)] if claude else [])
+    folders = [str(Path(sys.executable).parent), *([str(Path(claude).parent)] if claude else [])]
+    return list(dict.fromkeys([*folders, *filter(None, os.environ.get("PATH", "").split(os.pathsep))]))

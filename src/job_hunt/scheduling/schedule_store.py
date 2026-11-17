@@ -1,6 +1,8 @@
-"""The scheduler's files in the state folder: the schedule the user set and
-the record of slots run. Written atomically (temp file, then rename), so a
-check that dies midway never leaves a half-written file behind."""
+"""The scheduler's files in the state folder: the schedule the user set,
+the record of slots run, and the PATH a run needs (what worked in the
+terminal where the schedule was set; schedulers start jobs with a bare
+one). Written atomically (temp file, then rename), so a check that dies
+midway never leaves a half-written file behind."""
 
 import json
 import os
@@ -12,6 +14,7 @@ from job_hunt.scheduling.slots import SlotHistory
 
 SPEC_FILE = "schedule.json"
 HISTORY_FILE = "history.json"
+RUN_PATH_FILE = "run_path.json"
 
 
 class ScheduleStore:
@@ -30,21 +33,17 @@ class ScheduleStore:
 
     def load_history(self) -> SlotHistory:
         data = self.read_json(HISTORY_FILE) or {}
-        return SlotHistory(
-            claimed=set(data.get("claimed", [])),
-            attempts=dict(data.get("attempts", {})),
-            wake_reminder_day=data.get("wake_reminder_day"),
-        )
+        return SlotHistory(claimed=set(data.get("claimed", [])), attempts=dict(data.get("attempts", {})))
 
     def save_history(self, history: SlotHistory) -> None:
-        self.write_json(
-            HISTORY_FILE,
-            {
-                "claimed": sorted(history.claimed),
-                "attempts": history.attempts,
-                "wake_reminder_day": history.wake_reminder_day,
-            },
-        )
+        self.write_json(HISTORY_FILE, {"claimed": sorted(history.claimed), "attempts": history.attempts})
+
+    # folders put first on the run's PATH
+    def load_run_path(self) -> list[str]:
+        return list(self.read_json(RUN_PATH_FILE) or [])
+
+    def save_run_path(self, folders: list[str]) -> None:
+        self.write_json(RUN_PATH_FILE, folders)
 
     def read_json(self, name: str) -> Any:
         path = self.state_dir / name

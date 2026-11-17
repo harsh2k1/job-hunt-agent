@@ -1,9 +1,9 @@
 """Which slots are due at a check, and the record of slots already run.
 
 A slot is one scheduled time on one day ("2026-11-18 03:00"). Each check
-looks back one day: with catch-up on (--run-on-wake), every slot in that day not yet run is
-due (several missed slots are covered by one run); with it off, only a slot
-the check finds within the grace period."""
+looks back one day: with catch-up on (--run-on-wake), every slot in that
+day not yet run is due (several missed slots are covered by one run); with
+it off, only a slot the check finds within the grace period."""
 
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
@@ -27,8 +27,6 @@ class SlotHistory:
     claimed: set[str] = field(default_factory=set)
     # failed attempts per slot
     attempts: dict[str, int] = field(default_factory=dict)
-    # the day a "book more wakes" reminder was last shown
-    wake_reminder_day: str | None = None
 
     def claim(self, slots: list[datetime]) -> None:
         self.claimed.update(slot_id(slot) for slot in slots)

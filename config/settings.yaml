@@ -656,9 +656,10 @@ default:
   # wake choices are made on the command line and kept in state_dir; these
   # are how the scheduler itself behaves.
   scheduling:
-    # launchd (macOS): a light check every check_interval_minutes decides
-    # whether a slot is due (launchd's calendar timer proved unreliable)
-    backend: launchd
+    # auto: launchd on macOS, systemd on Linux, task_scheduler on Windows.
+    # Each starts a light check every check_interval_minutes that decides
+    # whether a slot is due, so the rules are the same on every system.
+    backend: auto
     state_dir: "@format {this.REPO_ROOT}/data/schedule"
     log_dir: "@format {this.REPO_ROOT}/logs/scheduled"
     check_interval_minutes: 5
@@ -670,15 +671,17 @@ default:
     run_time_limit_minutes: 240
     # a failed run is retried at the next checks, at most this often per slot
     attempts_per_slot: 3
-    # --wake: wake the Mac this many minutes before a slot, booked this many
-    # days ahead (macOS repeats only one wake time, so each is booked)
-    wake_minutes_before: 2
-    wake_days_ahead: 60
     launchd:
       label: com.jobhunt.agent.scheduled
       # runs the check, so macOS can grant it access to ~/Documents
       # (a bare background script is refused)
       app_path: "~/Applications/JobHuntScheduler.app"
+    systemd:
+      # user units (a .service and its .timer) in ~/.config/systemd/user
+      unit_name: job-hunt-check
+    task_scheduler:
+      # tasks live in this Task Scheduler folder
+      folder: JobHunt
 
   # Accounts for portals that need a login; the details go in
   # config/.secrets.yaml, never here.

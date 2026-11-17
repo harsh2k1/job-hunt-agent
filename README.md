@@ -72,24 +72,23 @@ job-hunt clear-cache                      # drop every cached response
 ```bash
 job-hunt schedule set --at 3am --at 9pm          # job-hunt run every day at 03:00 and 21:00
 job-hunt schedule set --times-per-day 3 --first 03:00   # 03:00, 11:00, 19:00
-job-hunt schedule set --at 03:00 --run-on-wake   # a run missed while the Mac slept happens when it wakes
-job-hunt schedule set --at 03:00 --wake-mac      # wake the Mac for each run (admin password once)
+job-hunt schedule set --at 03:00 --run-on-wake   # a run missed while asleep happens on waking
 job-hunt schedule status                         # times, slots run, whether checks are running
-job-hunt schedule renew                          # set up again from the saved schedule (more wakes)
-job-hunt schedule off                            # stop, and cancel booked wakes
+job-hunt schedule off                            # stop
 ```
 
-On macOS a launchd job runs `job-hunt schedule check` every 5 minutes through
-a small app (`~/Applications/JobHuntScheduler.app`, so macOS can let it read
-~/Documents; allow it once when asked). A check runs `job-hunt run` only when
-a slot is due. A slot missed while the Mac slept or was off is skipped,
-unless `--run-on-wake` is given: then it runs at the first check after the
-Mac is back (several missed slots are covered by one run). Each run waits for the internet, keeps the Mac
-awake, has a wall-clock time limit, and is retried up to 3 times if it fails.
-Logs: `logs/scheduled/<date>.log`; a notification shows each outcome.
-`--wake-mac` books a wake 2 minutes before each slot for the next 60 days
-(macOS repeats only one wake a day); a Mac with its lid closed only wakes on
-the charger.
+The system's own scheduler starts `job-hunt schedule check` every 5 minutes:
+launchd on macOS (through `~/Applications/JobHuntScheduler.app`, so macOS
+can let it read ~/Documents; allow it once when asked), a systemd user timer
+on Linux (`loginctl enable-linger` to run while logged out), Task Scheduler
+on Windows. A check runs `job-hunt run` only when a slot is due. A slot
+missed while the computer slept or was off is skipped, unless
+`--run-on-wake` is given: then it runs at the first check after the computer
+is back (several missed slots are covered by one run). The computer is never
+woken for a run. Each run waits for the internet, keeps the computer from
+sleeping until it ends, has a wall-clock time limit, and is retried up to 3
+times if it fails. Logs: `logs/scheduled/<date>.log`; a notification shows
+each outcome.
 
 `python -m job_hunt <command>` does the same without installing. `fetch` exits
 with 1 if any source failed, so a scheduled run gets noticed.
