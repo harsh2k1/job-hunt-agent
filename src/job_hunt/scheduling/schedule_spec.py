@@ -21,7 +21,8 @@ class ScheduleSpec(BaseModel):
     frequency: Frequency = "daily"
     # local wall-clock times, sorted, no repeats
     times: tuple[time, ...] = Field(min_length=1)
-    # a slot missed while the Mac slept or was off runs as soon as it's back
+    # --run-on-wake: a slot missed while the Mac slept or was off runs as soon
+    # as it's back; otherwise it's skipped
     catch_up: bool
     # the Mac is woken shortly before each slot
     wake: bool

@@ -63,19 +63,18 @@ class ScheduleCommand(CliCommand):
             default="daily",
             help="how often the times repeat (default daily)",
         )
+        # both off unless asked for: a run missed while the Mac slept is skipped
         set_parser.add_argument(
-            "--catch-up",
-            action=argparse.BooleanOptionalAction,
-            # None, so argparse doesn't add its own "(default: True)"; None means on
-            default=None,
-            help="a run missed while the Mac slept or was off happens as soon as it's back (default: on)",
+            "--run-on-wake",
+            action="store_true",
+            help="a run missed while the Mac slept or was off happens as soon as it's back "
+            "(without this it's skipped)",
         )
         set_parser.add_argument(
-            "--wake",
-            action=argparse.BooleanOptionalAction,
-            default=None,
+            "--wake-mac",
+            action="store_true",
             help="wake the Mac from sleep for each run; needs your admin password once, and the charger "
-            "if the lid is closed (default: off)",
+            "if the lid is closed",
         )
         actions.add_parser("status", help="the schedule, what's next, and the last runs")
         actions.add_parser("renew", help="set up again from the saved schedule (books more wakes)")
@@ -115,8 +114,8 @@ class ScheduleCommand(CliCommand):
         spec = ScheduleSpec(
             frequency=args.frequency,
             times=times,
-            catch_up=args.catch_up is not False,
-            wake=args.wake is True,
+            catch_up=args.run_on_wake,
+            wake=args.wake_mac,
             active_since=datetime.now(),
         )
         store.save_spec(spec)

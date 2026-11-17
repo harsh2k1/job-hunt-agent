@@ -1,7 +1,7 @@
 """Which slots are due at a check, and the record of slots already run.
 
 A slot is one scheduled time on one day ("2026-11-18 03:00"). Each check
-looks back one day: with catch-up on, every slot in that day not yet run is
+looks back one day: with catch-up on (--run-on-wake), every slot in that day not yet run is
 due (several missed slots are covered by one run); with it off, only a slot
 the check finds within the grace period."""
 

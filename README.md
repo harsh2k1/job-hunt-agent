@@ -72,8 +72,8 @@ job-hunt clear-cache                      # drop every cached response
 ```bash
 job-hunt schedule set --at 3am --at 9pm          # job-hunt run every day at 03:00 and 21:00
 job-hunt schedule set --times-per-day 3 --first 03:00   # 03:00, 11:00, 19:00
-job-hunt schedule set --at 03:00 --no-catch-up   # skip a run missed while the Mac slept
-job-hunt schedule set --at 03:00 --wake          # also wake the Mac for it (admin password once)
+job-hunt schedule set --at 03:00 --run-on-wake   # a run missed while the Mac slept happens when it wakes
+job-hunt schedule set --at 03:00 --wake-mac      # wake the Mac for each run (admin password once)
 job-hunt schedule status                         # times, slots run, whether checks are running
 job-hunt schedule renew                          # set up again from the saved schedule (more wakes)
 job-hunt schedule off                            # stop, and cancel booked wakes
@@ -82,12 +82,12 @@ job-hunt schedule off                            # stop, and cancel booked wakes
 On macOS a launchd job runs `job-hunt schedule check` every 5 minutes through
 a small app (`~/Applications/JobHuntScheduler.app`, so macOS can let it read
 ~/Documents; allow it once when asked). A check runs `job-hunt run` only when
-a slot is due. With catch-up on (the default), a slot missed while the Mac
-slept or was off runs at the first check after it's back; several missed
-slots are covered by one run. Each run waits for the internet, keeps the Mac
+a slot is due. A slot missed while the Mac slept or was off is skipped,
+unless `--run-on-wake` is given: then it runs at the first check after the
+Mac is back (several missed slots are covered by one run). Each run waits for the internet, keeps the Mac
 awake, has a wall-clock time limit, and is retried up to 3 times if it fails.
 Logs: `logs/scheduled/<date>.log`; a notification shows each outcome.
-`--wake` books a wake 2 minutes before each slot for the next 60 days
+`--wake-mac` books a wake 2 minutes before each slot for the next 60 days
 (macOS repeats only one wake a day); a Mac with its lid closed only wakes on
 the charger.
 
