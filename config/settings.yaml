@@ -652,6 +652,34 @@ default:
     # set in .secrets.yaml
     service_account: null
 
+  # The recurring run (`job-hunt schedule set`). The times, catch-up and
+  # wake choices are made on the command line and kept in state_dir; these
+  # are how the scheduler itself behaves.
+  scheduling:
+    # launchd (macOS): a light check every check_interval_minutes decides
+    # whether a slot is due (launchd's calendar timer proved unreliable)
+    backend: launchd
+    state_dir: "@format {this.REPO_ROOT}/data/schedule"
+    log_dir: "@format {this.REPO_ROOT}/logs/scheduled"
+    check_interval_minutes: 5
+    # without catch-up, a slot still runs if the check finds it this late
+    on_time_grace_minutes: 15
+    # after a wake Wi-Fi can lag; the slot stays due if it isn't back by then
+    internet_wait_seconds: 180
+    # wall-clock limit for one run: a hung network call can't hold the lock
+    run_time_limit_minutes: 240
+    # a failed run is retried at the next checks, at most this often per slot
+    attempts_per_slot: 3
+    # --wake: wake the Mac this many minutes before a slot, booked this many
+    # days ahead (macOS repeats only one wake time, so each is booked)
+    wake_minutes_before: 2
+    wake_days_ahead: 60
+    launchd:
+      label: com.jobhunt.agent.scheduled
+      # runs the check, so macOS can grant it access to ~/Documents
+      # (a bare background script is refused)
+      app_path: "~/Applications/JobHuntScheduler.app"
+
   # Accounts for portals that need a login; the details go in
   # config/.secrets.yaml, never here.
   portal_logins:
@@ -675,6 +703,9 @@ testing:
     min_seconds_between_requests_to_same_host: 0
   company_discovery:
     seconds_between_searches: 0
+  scheduling:
+    state_dir: "@format {this.REPO_ROOT}/.pytest_tmp/schedule"
+    log_dir: "@format {this.REPO_ROOT}/.pytest_tmp/scheduled_logs"
   job_sources:
     kcl_target_connect:
       # tests never open a browser window

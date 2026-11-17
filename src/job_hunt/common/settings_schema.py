@@ -383,6 +383,30 @@ class GoogleSheetSettings(StrictModel):
         return json.dumps(dict(value)) if isinstance(value, Mapping) else value
 
 
+class LaunchdSchedulingSettings(StrictModel):
+    label: str = Field(min_length=1)
+    app_path: Path
+
+    @field_validator("app_path")
+    @classmethod
+    def expand_home(cls, value: Path) -> Path:
+        return value.expanduser()
+
+
+class SchedulingSettings(StrictModel):
+    backend: Literal["launchd"]
+    state_dir: Path
+    log_dir: Path
+    check_interval_minutes: int = Field(ge=1, le=60)
+    on_time_grace_minutes: int = Field(ge=1)
+    internet_wait_seconds: int = Field(ge=0)
+    run_time_limit_minutes: int = Field(ge=1)
+    attempts_per_slot: int = Field(ge=1)
+    wake_minutes_before: int = Field(ge=0, le=30)
+    wake_days_ahead: int = Field(ge=1, le=365)
+    launchd: LaunchdSchedulingSettings
+
+
 class Settings(StrictModel):
     env: str
     logging: LoggingSettings
@@ -399,3 +423,4 @@ class Settings(StrictModel):
     llm: LlmSettings
     llm_screening: LlmScreeningSettings
     google_sheet: GoogleSheetSettings
+    scheduling: SchedulingSettings
