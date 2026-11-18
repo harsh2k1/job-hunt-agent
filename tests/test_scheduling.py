@@ -277,10 +277,12 @@ def test_a_runs_output_goes_to_the_log_and_only_its_own_steps_are_read(tmp_path)
     assert "earlier run" in log.read_text()
 
 
-def test_macos_the_app_runs_the_check_with_quoted_paths():
+def test_macos_the_app_runs_the_check_with_quoted_paths_and_never_shows_an_error_dialog():
     source = app_source(["/Users/me/My venv/bin/python", "-m", "job_hunt", "schedule", "check"])
     assert source == (
-        "do shell script \"'/Users/me/My venv/bin/python' -m job_hunt schedule check >/dev/null 2>&1\"\n"
+        "try\n"
+        "\tdo shell script \"'/Users/me/My venv/bin/python' -m job_hunt schedule check >/dev/null 2>&1\"\n"
+        "end try\n"
     )
 
 

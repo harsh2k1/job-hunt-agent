@@ -16,9 +16,10 @@ import plistlib
 import shlex
 import shutil
 import subprocess
+import time
 from collections.abc import Iterator
 from contextlib import contextmanager
-from datetime import time
+from datetime import time as clock_time
 from pathlib import Path
 
 from job_hunt.scheduling.schedule_backend import (
@@ -29,15 +30,19 @@ from job_hunt.scheduling.schedule_backend import (
 
 LAUNCH_AGENTS_DIR = Path.home() / "Library" / "LaunchAgents"
 APP_SOURCE_FILE = "scheduler_app.applescript"
+UNLOAD_WAIT_SECONDS = 10
 
 
+# A failed shell command would make the app show an error dialog and wait
+# for a click, and launchd starts no new check while it waits; a check's
+# outcome is in its log and a notification, so the app ignores it.
 def app_source(check_command: list[str]) -> str:
     shell = f"{shlex.join(check_command)} >/dev/null 2>&1"
-    return f"do shell script {applescript_string(shell)}\n"
+    return f"try\n\tdo shell script {applescript_string(shell)}\nend try\n"
 
 
 def launch_agent_plist(
-    label: str, app_path: Path, interval_minutes: int, log_dir: Path, times: tuple[time, ...]
+    label: str, app_path: Path, interval_minutes: int, log_dir: Path, times: tuple[clock_time, ...]
 ) -> bytes:
     return plistlib.dumps(
         {
@@ -75,7 +80,7 @@ class LaunchdBackend(ScheduleBackend):
     def _service(self) -> str:
         return f"gui/{os.getuid()}/{self._label}"
 
-    def install(self, check_command: list[str], times: tuple[time, ...]) -> list[str]:
+    def install(self, check_command: list[str], times: tuple[clock_time, ...]) -> list[str]:
         self._settings.log_dir.mkdir(parents=True, exist_ok=True)
         notes = self._build_app(check_command)
         LAUNCH_AGENTS_DIR.mkdir(parents=True, exist_ok=True)
@@ -88,14 +93,24 @@ class LaunchdBackend(ScheduleBackend):
                 times,
             )
         )
-        # reloaded, so a changed interval or app takes effect; not loaded yet is fine
-        run_system_command(["launchctl", "bootout", self._service], check=False)
+        # reloaded, so changed times or a new app take effect; not loaded yet is fine
+        self._unload()
         run_system_command(["launchctl", "bootstrap", f"gui/{os.getuid()}", str(self._plist_path)])
         return notes
 
     def uninstall(self) -> None:
-        run_system_command(["launchctl", "bootout", self._service], check=False)
+        self._unload()
         self._plist_path.unlink(missing_ok=True)
+
+    # bootout returns before launchd has let go of the job, and loading it
+    # again before then fails ("Bootstrap failed: 5: Input/output error")
+    def _unload(self) -> None:
+        run_system_command(["launchctl", "bootout", self._service], check=False)
+        deadline = time.monotonic() + UNLOAD_WAIT_SECONDS
+        while time.monotonic() < deadline:
+            if run_system_command(["launchctl", "print", self._service], check=False).returncode != 0:
+                return
+            time.sleep(0.2)
 
     def describe(self) -> list[str]:
         loaded = run_system_command(["launchctl", "print", self._service], check=False)
