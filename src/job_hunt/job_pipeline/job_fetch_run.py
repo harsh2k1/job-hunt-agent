@@ -1,4 +1,8 @@
 from collections.abc import Iterable
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
+from datetime import datetime
+from itertools import groupby
 
 from pydantic import BaseModel
 
@@ -23,12 +27,29 @@ class SourceFetchReport(BaseModel):
     error: str | None = None
 
 
-class JobFetchRun:
-    """Runs sources one after another, saves what each finds, and adds any
-    company board a job advert links to.
+@dataclass
+class _Fetched:
+    started_at: datetime
+    finished_at: datetime
+    batches: list[tuple[datetime | None, list[FetchedJob]]]
+    error: str | None = None
 
-    Sources run in the order given (JobSourceFactory puts the ones that add
-    companies first). One source failing never stops the others.
+
+# which sources must wait for others: board readers and feeds first, then
+# those working from stored jobs, then those reading the tracked companies
+# (which the earlier ones may add to)
+def _phase(source: JobSource) -> tuple[bool, bool]:
+    return (source.reads_tracked_companies, source.reads_stored_jobs)
+
+
+class JobFetchRun:
+    """Fetches from every source, saves what each finds, and adds any company
+    board a job advert links to.
+
+    Sources go in phases (see _phase); within a phase up to max_parallel of
+    them fetch at the same time, since they read different sites. Saving
+    happens one source at a time, in the order given, once its phase is
+    done. One source failing never stops the others.
     """
 
     def __init__(
@@ -37,8 +58,10 @@ class JobFetchRun:
         job_repository: JobRepository | None = None,
         company_repository: CompanyRepository | None = None,
         run_repository: SourceRunRepository | None = None,
+        max_parallel: int = 1,
     ):
         self._sources = sources
+        self._max_parallel = max_parallel
         self._job_repository = job_repository or JobRepository()
         self._company_repository = company_repository or CompanyRepository()
         self._run_repository = run_repository or SourceRunRepository()
@@ -47,32 +70,41 @@ class JobFetchRun:
     # can be judged against its own history
     def run(self) -> list[SourceFetchReport]:
         reports = []
-        for source in self._sources:
-            started_at = utc_now()
-            report = self._fetch_from(source)
-            self._run_repository.record(
-                SourceRun(
-                    source=source.name,
-                    started_at=started_at,
-                    finished_at=utc_now(),
-                    fetched_jobs=report.fetched_jobs,
-                    new_jobs=report.new_jobs,
-                    error=report.error,
-                )
-            )
-            reports.append(report)
+        ordered = sorted(self._sources, key=_phase)
+        with ThreadPoolExecutor(max_workers=self._max_parallel) as pool:
+            for _, phase in groupby(ordered, key=_phase):
+                sources = list(phase)
+                for source, fetched in zip(sources, pool.map(self._fetch, sources), strict=True):
+                    report = self._save(source, fetched)
+                    self._run_repository.record(
+                        SourceRun(
+                            source=source.name,
+                            started_at=fetched.started_at,
+                            finished_at=fetched.finished_at,
+                            fetched_jobs=report.fetched_jobs,
+                            new_jobs=report.new_jobs,
+                            error=report.error,
+                        )
+                    )
+                    reports.append(report)
         return reports
 
-    def _fetch_from(self, source: JobSource) -> SourceFetchReport:
+    # runs in a worker thread: only reads, so nothing is written from two at once
+    def _fetch(self, source: JobSource) -> _Fetched:
         logger.info("%s: fetching", source.name)
+        started_at = utc_now()
         try:
-            batches = source.fetch_job_batches()
+            return _Fetched(started_at, utc_now(), source.fetch_job_batches())
         # the run's outer boundary: whatever broke inside a source is logged
-        # with its traceback and reported, and the next source still runs
+        # with its traceback and reported, and the other sources still run
         except Exception as error:
             logger.exception("%s: failed", source.name)
-            return SourceFetchReport(source_name=source.name, error=str(error) or type(error).__name__)
+            return _Fetched(started_at, utc_now(), [], str(error) or type(error).__name__)
 
+    def _save(self, source: JobSource, fetched: _Fetched) -> SourceFetchReport:
+        if fetched.error is not None:
+            return SourceFetchReport(source_name=source.name, error=fetched.error)
+        batches = fetched.batches
         # oldest batch first, so each job ends up last seen in the newest one
         new_jobs = 0
         for seen_at, batch in batches:

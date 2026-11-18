@@ -1,3 +1,4 @@
+import threading
 import time
 from functools import cache
 from typing import Any
@@ -39,7 +40,9 @@ class HttpClient:
             follow_redirects=True,
             transport=transport,
         )
-        self._last_request_time_by_host: dict[str, float] = {}
+        # when each host may next be asked; sources fetched in parallel share it
+        self._next_request_time_by_host: dict[str, float] = {}
+        self._host_slot_lock = threading.Lock()
 
     def get_json(
         self, url: str, params: dict[str, Any] | None = None, headers: dict[str, str] | None = None
@@ -101,15 +104,18 @@ class HttpClient:
 
         raise AssertionError("unreachable: the last attempt always returns or raises")
 
+    # Each request to a host takes the next free slot, min_gap after the one
+    # before, under a lock so threads can't take the same slot; the wait for
+    # it happens outside the lock, so other hosts aren't held up.
     def _wait_for_host_slot(self, url: str) -> None:
         host = urlparse(url).netloc
         min_gap = self._settings.min_seconds_between_requests_to_same_host
-        last_request_time = self._last_request_time_by_host.get(host)
-        if last_request_time is not None:
-            wait_seconds = min_gap - (time.monotonic() - last_request_time)
-            if wait_seconds > 0:
-                time.sleep(wait_seconds)
-        self._last_request_time_by_host[host] = time.monotonic()
+        with self._host_slot_lock:
+            now = time.monotonic()
+            slot = max(now, self._next_request_time_by_host.get(host, now))
+            self._next_request_time_by_host[host] = slot + min_gap
+        if slot > now:
+            time.sleep(slot - now)
 
     def _sleep_before_retry(self, attempt: int, retry_after_header: str | None = None) -> None:
         # a server that says how long to wait knows better than our backoff

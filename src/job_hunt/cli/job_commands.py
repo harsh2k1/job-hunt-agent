@@ -31,7 +31,10 @@ class FetchJobsCommand(CliCommand):
 
     # Exit code 1 if any source failed, so a scheduled run gets noticed.
     def run(self, args: argparse.Namespace) -> int:
-        reports = JobFetchRun(JobSourceFactory.create_sources(args.source_names)).run()
+        reports = JobFetchRun(
+            JobSourceFactory.create_sources(args.source_names),
+            max_parallel=settings.daily_run.max_parallel_sources,
+        ).run()
         print_fetch_reports(reports)
         return EXIT_FAILURE if any(report.error for report in reports) else EXIT_SUCCESS
 
@@ -103,14 +106,22 @@ class DailyRunCommand(CliCommand):
         parser.add_argument(
             "--no-sponsor-register", action="store_true", help="skip the sponsor register check"
         )
+        parser.add_argument(
+            "--all-steps",
+            action="store_true",
+            help="run every step even if it isn't due (daily_run.every_days in settings)",
+        )
 
     # Exit code 1 if any step failed, so a scheduled run gets noticed.
     def run(self, args: argparse.Namespace) -> int:
         outcomes = DailyRun.from_settings(
-            include_discovery=not args.no_discovery, include_sponsor_register=not args.no_sponsor_register
+            include_discovery=not args.no_discovery,
+            include_sponsor_register=not args.no_sponsor_register,
+            all_steps=args.all_steps,
         ).run()
         for outcome in outcomes:
-            print(f"{'ok' if outcome.succeeded else 'FAILED':<7} {outcome.step:<24} {outcome.summary}")
+            status = "skip" if outcome.skipped else "ok" if outcome.succeeded else "FAILED"
+            print(f"{status:<7} {outcome.step:<24} {outcome.summary}")
         return EXIT_SUCCESS if all(outcome.succeeded for outcome in outcomes) else EXIT_FAILURE
 
 

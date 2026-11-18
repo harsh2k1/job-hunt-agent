@@ -97,3 +97,45 @@ def test_every_source_run_is_recorded_failures_included(database):
     [linkedin_run] = runs.recent_runs("linkedin", limit=5)
     assert (indeed_run.fetched_jobs, indeed_run.new_jobs, indeed_run.error) == (1, 1, None)
     assert linkedin_run.error == "site changed its layout"
+
+
+class SlowSource(StaticSource):
+    """Notes when it starts and ends, and waits a little in between."""
+
+    def __init__(self, name: str, timeline: list[str], reads_stored_jobs: bool = False):
+        super().__init__(name, [make_job(name, "1")])
+        self.reads_stored_jobs = reads_stored_jobs
+        self._timeline = timeline
+
+    def _list_raw_postings(self):
+        import time
+
+        self._timeline.append(f"start {self.name}")
+        time.sleep(0.2)
+        self._timeline.append(f"end {self.name}")
+        return super()._list_raw_postings()
+
+
+def test_sources_of_one_phase_fetch_together_and_the_next_phase_waits(database):
+    timeline: list[str] = []
+    sources = [
+        SlowSource("indeed", timeline),
+        SlowSource("linkedin", timeline),
+        # works from stored jobs: only once the first phase is saved
+        SlowSource("employer_adverts", timeline, reads_stored_jobs=True),
+    ]
+    run = JobFetchRun(
+        sources, JobRepository(database), CompanyRepository(database), SourceRunRepository(database), 4
+    )
+    reports = run.run()
+
+    # both board sources started before either ended: they ran together
+    assert set(timeline[:2]) == {"start indeed", "start linkedin"}
+    assert timeline[-2:] == ["start employer_adverts", "end employer_adverts"]
+    # reported in the order given, each saved
+    assert [report.source_name for report in reports] == ["indeed", "linkedin", "employer_adverts"]
+    assert JobRepository(database).count_jobs_by_source() == {
+        "indeed": 1,
+        "linkedin": 1,
+        "employer_adverts": 1,
+    }

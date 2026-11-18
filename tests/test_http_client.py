@@ -63,3 +63,27 @@ def test_byte_range_and_size_of_a_published_file():
     client = HttpClient(settings.http, transport=httpx.MockTransport(answer))
     assert client.get_content_length("https://data.example/file") == 10
     assert client.get_byte_range("https://data.example/file", 2, 4) == b"234"
+
+
+def test_requests_to_one_host_from_several_threads_stay_spaced_out():
+    import threading
+    import time
+
+    sent_at: list[float] = []
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        sent_at.append(time.monotonic())
+        return httpx.Response(200, text="ok")
+
+    gap = 0.1
+    spaced = settings.http.model_copy(update={"min_seconds_between_requests_to_same_host": gap})
+    client = HttpClient(spaced, transport=httpx.MockTransport(answer))
+    threads = [
+        threading.Thread(target=client.get_text, args=("https://boards.example.com/a",)) for _ in range(4)
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    gaps = [later - earlier for earlier, later in zip(sorted(sent_at), sorted(sent_at)[1:], strict=False)]
+    assert len(sent_at) == 4 and all(spacing >= gap * 0.95 for spacing in gaps)

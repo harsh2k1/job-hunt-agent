@@ -1,8 +1,13 @@
 """The daily run: every step that keeps the job list current, in order, each
-on its own so one failing doesn't stop the rest."""
+on its own so one failing doesn't stop the rest. Each step runs every so
+many days (daily_run.every_days): a step that isn't due says so and is
+skipped, and a step's day is recorded only when it succeeds."""
 
+import json
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from datetime import date
+from pathlib import Path
 from typing import ClassVar
 
 from job_hunt.common.http_client import get_http_client
@@ -27,10 +32,14 @@ class StepOutcome:
     step: str
     succeeded: bool
     summary: str
+    # not due today: neither run nor failed
+    skipped: bool = False
 
 
 class DailyRunStep(ABC):
     name: ClassVar[str]
+    # its line in daily_run.every_days
+    key: ClassVar[str]
 
     @abstractmethod
     def run(self) -> StepOutcome: ...
@@ -38,6 +47,7 @@ class DailyRunStep(ABC):
 
 class SponsorRegisterStep(DailyRunStep):
     name = "sponsor register"
+    key = "sponsor_register"
 
     def run(self) -> StepOutcome:
         update = update_sponsor_register(get_http_client(), SponsorRepository())
@@ -50,6 +60,7 @@ class SponsorRegisterStep(DailyRunStep):
 
 class WebSearchDiscoveryStep(DailyRunStep):
     name = "web search discovery"
+    key = "web_search_discovery"
 
     def __init__(self, settings: Settings):
         self._settings = settings
@@ -62,6 +73,7 @@ class WebSearchDiscoveryStep(DailyRunStep):
 
 class CommonCrawlDiscoveryStep(DailyRunStep):
     name = "Common Crawl discovery"
+    key = "common_crawl_discovery"
 
     def __init__(self, settings: Settings):
         self._settings = settings
@@ -72,12 +84,16 @@ class CommonCrawlDiscoveryStep(DailyRunStep):
 
 class FetchJobsStep(DailyRunStep):
     name = "fetch"
+    key = "fetch"
 
     def __init__(self, settings: Settings):
         self._settings = settings
 
     def run(self) -> StepOutcome:
-        reports = JobFetchRun(JobSourceFactory.create_sources(settings=self._settings)).run()
+        reports = JobFetchRun(
+            JobSourceFactory.create_sources(settings=self._settings),
+            max_parallel=self._settings.daily_run.max_parallel_sources,
+        ).run()
         failed = [report.source_name for report in reports if report.error]
         summary = (
             f"{len(reports)} sources, {sum(report.fetched_jobs for report in reports)} jobs "
@@ -91,6 +107,7 @@ class FetchJobsStep(DailyRunStep):
 
 class SourceHealthStep(DailyRunStep):
     name = "source health"
+    key = "source_health"
 
     def __init__(self, settings: Settings):
         self._settings = settings
@@ -117,6 +134,7 @@ class SourceHealthStep(DailyRunStep):
 
 class LlmScreeningStep(DailyRunStep):
     name = "LLM screening"
+    key = "llm_screening"
 
     def __init__(self, settings: Settings):
         self._settings = settings
@@ -128,6 +146,7 @@ class LlmScreeningStep(DailyRunStep):
 
 class SheetSyncStep(DailyRunStep):
     name = "Google Sheet"
+    key = "google_sheet"
 
     def __init__(self, settings: Settings):
         self._settings = settings
@@ -139,9 +158,39 @@ class SheetSyncStep(DailyRunStep):
         return StepOutcome(self.name, True, str(counts))
 
 
+class StepRunLog:
+    """The day each step last succeeded, in a small JSON file."""
+
+    def __init__(self, path: Path):
+        self._path = path
+
+    def last_run(self, key: str) -> date | None:
+        text = self._read().get(key)
+        return date.fromisoformat(text) if text else None
+
+    def record(self, key: str, day: date) -> None:
+        days = self._read()
+        days[key] = day.isoformat()
+        self._path.parent.mkdir(parents=True, exist_ok=True)
+        self._path.write_text(json.dumps(days, indent=2, sort_keys=True))
+
+    def _read(self) -> dict[str, str]:
+        return json.loads(self._path.read_text()) if self._path.exists() else {}
+
+
 class DailyRun:
-    def __init__(self, steps: list[DailyRunStep]):
+    def __init__(
+        self,
+        steps: list[DailyRunStep],
+        every_days: dict[str, int] | None = None,
+        run_log: StepRunLog | None = None,
+        today: date | None = None,
+    ):
         self._steps = steps
+        # None: every step runs (by hand: --all-steps)
+        self._every_days = every_days
+        self._run_log = run_log
+        self._today = today or date.today()
 
     @classmethod
     def from_settings(
@@ -149,6 +198,7 @@ class DailyRun:
         settings: Settings = app_settings,
         include_discovery: bool = True,
         include_sponsor_register: bool = True,
+        all_steps: bool = False,
     ) -> "DailyRun":
         steps: list[DailyRunStep] = []
         if include_sponsor_register:
@@ -160,7 +210,8 @@ class DailyRun:
             steps.append(LlmScreeningStep(settings))
         if settings.google_sheet.enabled:
             steps.append(SheetSyncStep(settings))
-        return cls(steps)
+        every_days = None if all_steps else settings.daily_run.every_days.model_dump()
+        return cls(steps, every_days, StepRunLog(settings.daily_run.state_file))
 
     @property
     def step_names(self) -> list[str]:
@@ -169,6 +220,11 @@ class DailyRun:
     def run(self) -> list[StepOutcome]:
         outcomes = []
         for step in self._steps:
+            not_due = self._not_due(step)
+            if not_due:
+                logger.info("daily run: %s %s", step.name, not_due)
+                outcomes.append(StepOutcome(step.name, True, not_due, skipped=True))
+                continue
             logger.info("daily run: %s", step.name)
             try:
                 outcome = step.run()
@@ -177,5 +233,17 @@ class DailyRun:
             except Exception as error:
                 logger.exception("daily run: %s failed", step.name)
                 outcome = StepOutcome(step.name, False, f"failed: {error or type(error).__name__}")
+            if outcome.succeeded and self._run_log is not None:
+                self._run_log.record(step.key, self._today)
             outcomes.append(outcome)
         return outcomes
+
+    # why a step isn't due today, or "" when it is
+    def _not_due(self, step: DailyRunStep) -> str:
+        if self._every_days is None or self._run_log is None:
+            return ""
+        every = self._every_days[step.key]
+        last = self._run_log.last_run(step.key)
+        if last is None or (self._today - last).days >= every:
+            return ""
+        return f"not due: every {every} days, last run {last.isoformat()}"

@@ -48,6 +48,7 @@ ruff check src tests migrations && ruff format --check src tests migrations
 
 ```bash
 job-hunt run                              # the daily run: sponsor register, discovery, every source, health
+job-hunt run --all-steps                  # every step, even ones not due today (see daily_run in settings)
 job-hunt migrate-db                       # bring the database schema up to date (safe to rerun)
 job-hunt seed-companies                   # load config/seed_companies.yaml (safe to rerun)
 job-hunt add-company --name Perplexity --board-url https://jobs.ashbyhq.com/perplexity
@@ -86,6 +87,16 @@ allows are read. The employer's copy then joins the card's listing, so its
 JD is shown and screened, and a company job board it's on is tracked from
 then on. Cards with no copy found keep their card facts and are searched
 again after 14 days.
+
+### How often each step runs
+
+`daily_run.every_days` in `config/settings.yaml` sets it, one line per step:
+fetching, screening and the sheet every run; web-search discovery every 2
+days, Common Crawl every 3, the sponsor register every 7. A step that isn't
+due is skipped and says when it last ran. Sources are fetched up to
+`daily_run.max_parallel_sources` at a time (different sites; each site's own
+request gap still applies): job boards and feeds first, then the employer
+advert lookup, then the company boards.
 
 ### Running it automatically
 

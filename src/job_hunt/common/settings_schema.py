@@ -415,6 +415,25 @@ class GoogleSheetSettings(StrictModel):
         return json.dumps(dict(value)) if isinstance(value, Mapping) else value
 
 
+class StepCadenceSettings(StrictModel):
+    sponsor_register: int = Field(ge=1)
+    web_search_discovery: int = Field(ge=1)
+    common_crawl_discovery: int = Field(ge=1)
+    fetch: int = Field(ge=1)
+    source_health: int = Field(ge=1)
+    llm_screening: int = Field(ge=1)
+    google_sheet: int = Field(ge=1)
+
+
+class DailyRunSettings(StrictModel):
+    # how often each step runs, in days: 1 = every run
+    every_days: StepCadenceSettings
+    # when each step last ran, so a step that isn't due is skipped
+    state_file: Path
+    # sources fetched at the same time (requests to any one site stay spaced)
+    max_parallel_sources: int = Field(ge=1)
+
+
 class LaunchdSchedulingSettings(StrictModel):
     label: str = Field(min_length=1)
     app_path: Path
@@ -465,3 +484,4 @@ class Settings(StrictModel):
     llm_screening: LlmScreeningSettings
     google_sheet: GoogleSheetSettings
     scheduling: SchedulingSettings
+    daily_run: DailyRunSettings

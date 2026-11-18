@@ -694,6 +694,27 @@ default:
     # set in .secrets.yaml
     service_account: null
 
+  # `job-hunt run`, the daily run: how often each step happens and how many
+  # sources are fetched at once. A step that isn't due is skipped (and says
+  # so); `job-hunt run --all-steps` runs every step regardless.
+  daily_run:
+    every_days:
+      # the Home Office updates its register about weekly
+      sponsor_register: 7
+      # finding new company boards: rate-limited searches, a few a day
+      web_search_discovery: 2
+      # Common Crawl's index changes monthly: about twice a week is plenty
+      common_crawl_discovery: 3
+      # new graduate jobs appear daily and close fast
+      fetch: 1
+      source_health: 1
+      llm_screening: 1
+      google_sheet: 1
+    state_file: "@format {this.REPO_ROOT}/data/daily_run_state.json"
+    # different sites, so fetching them together is polite: each site's own
+    # request gap still applies
+    max_parallel_sources: 6
+
   # The recurring run (`job-hunt schedule set`). The times, catch-up and
   # wake choices are made on the command line and kept in state_dir; these
   # are how the scheduler itself behaves.
@@ -749,6 +770,8 @@ testing:
     min_seconds_between_requests_to_same_host: 0
   company_discovery:
     seconds_between_searches: 0
+  daily_run:
+    state_file: "@format {this.REPO_ROOT}/.pytest_tmp/daily_run_state.json"
   scheduling:
     state_dir: "@format {this.REPO_ROOT}/.pytest_tmp/schedule"
     log_dir: "@format {this.REPO_ROOT}/.pytest_tmp/scheduled_logs"
