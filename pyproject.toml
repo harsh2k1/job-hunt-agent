@@ -25,6 +25,10 @@ dependencies = [
     "google-auth-oauthlib>=1.0",
     # writing the job list to a Google Sheet
     "gspread>=6.0",
+    # reading result pages saved from sites that can't be fetched (Gradcracker)
+    "beautifulsoup4>=4.12",
+    # an employer's advert out of its careers page, without menus and footers
+    "readability-lxml>=0.8",
 ]
 
 [project.optional-dependencies]

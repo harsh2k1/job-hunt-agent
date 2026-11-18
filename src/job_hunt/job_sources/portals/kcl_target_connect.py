@@ -62,6 +62,7 @@ class KclTargetConnectSource(JobSource[TargetConnectCard]):
     """
 
     name = "kcl_target_connect"
+    display_name = "KCL Target Connect"
     listing_rank = 40
 
     def __init__(

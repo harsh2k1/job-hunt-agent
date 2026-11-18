@@ -19,6 +19,7 @@ class AmazonJobsSource(SearchApiSource):
     term per place, limited to the configured country."""
 
     name = "amazon_jobs"
+    display_name = "Amazon Jobs"
     listing_rank = 20
     _source_settings: AmazonJobsSourceSettings
 

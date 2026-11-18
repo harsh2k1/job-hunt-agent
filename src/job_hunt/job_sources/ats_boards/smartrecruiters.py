@@ -19,6 +19,7 @@ class SmartRecruitersSource(AtsBoardSource):
     jobs worth reading."""
 
     ats_platform = AtsPlatform.SMARTRECRUITERS
+    display_name = "SmartRecruiters"
     search_domains = ("jobs.smartrecruiters.com",)
     _source_settings: SmartRecruitersSourceSettings
 

@@ -7,17 +7,19 @@ key), which say "self" under Found by.
 Skipped: everything screened out, with the reason, so nothing vanishes.
 """
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import datetime
 
 from job_hunt.job_pipeline.final_verdict import NOT_SCREENED, FinalVerdict
 from job_hunt.job_pipeline.listings import Listing
+from job_hunt.job_sources.job_source_factory import JobSourceFactory
 from job_hunt.job_store.models import ListingScreening
 
 KEY_COLUMN = "Listing key"
 SEQUENCE_COLUMN = "#"
 LINK_COLUMN = "Advert link"
+CLOSES_COLUMN = "Closes"
 # Google Sheets holds at most 50,000 characters in a cell
 MAX_CELL_CHARACTERS = 45_000
 FOUND_BY_AGENT = "agent"
@@ -45,6 +47,31 @@ LICENCE_LABELS = {
 LICENCE_CHOICES = dict(zip(LICENCE_LABELS.values(), ("green", "yellow", "red"), strict=True))
 VERDICT_CHOICES = {"apply": "green", "check": "yellow", NOT_SCREENED: "grey"}
 
+
+# every site's name; a plain dropdown, no colours
+def found_on_choices() -> dict[str, str | None]:
+    names = {JobSourceFactory.display_name(name) for name in JobSourceFactory.registered_source_names()}
+    return dict.fromkeys(sorted(names, key=str.lower))
+
+
+def _found_on(listing: Listing) -> str:
+    return JobSourceFactory.display_name(listing.primary.source)
+
+
+# the other sites listing the same advert
+def _also_on(listing: Listing) -> str:
+    shown = _found_on(listing)
+    others = dict.fromkeys(JobSourceFactory.display_name(source) for source in listing.sources)
+    return ", ".join(name for name in others if name != shown)
+
+
+# a valid role's bullets, or what to check about one on To check
+def _why(verdict: FinalVerdict) -> str:
+    if verdict.valid_because:
+        return verdict.valid_because
+    return f"To check: {verdict.reason}" if verdict.reason else ""
+
+
 ScreeningOf = Callable[[Listing], ListingScreening | None]
 VerdictOf = Callable[[Listing], FinalVerdict]
 CellValue = Callable[[Listing], str]
@@ -61,8 +88,12 @@ class SheetColumn:
     # shown in full over several lines (bullets); every other column is one
     # clipped line
     wraps: bool = False
-    # fixed values -> colour name: a dropdown and colour coding
-    choices: dict[str, str] | None = None
+    # fixed values -> colour name (None: no colour): a dropdown and colour coding
+    choices: Mapping[str, str | None] | None = None
+    # turns red while the role's deadline is within the next week
+    marks_closing_soon: bool = False
+    # stays in view while scrolling across; frozen columns come first
+    frozen: bool = False
 
     @property
     def belongs_to_user(self) -> bool:
@@ -84,6 +115,10 @@ def _first_fetched(listing: Listing) -> datetime:
     return min(job.first_seen_at for job in listing.sightings)
 
 
+def _first_fetched_date(listing: Listing) -> str:
+    return _date(_first_fetched(listing))
+
+
 def jobs_columns(
     sponsor_status: Callable[[str], str], screening_of: ScreeningOf, verdict_of: VerdictOf
 ) -> list[SheetColumn]:
@@ -96,25 +131,30 @@ def jobs_columns(
         return value
 
     return [
-        # the role: what it is, where to read it, where it was found
-        SheetColumn(SEQUENCE_COLUMN, 45, centred=True),
-        SheetColumn("Role", 300, lambda listing: listing.primary.title),
-        SheetColumn("Company", 180, lambda listing: listing.primary.company_name),
-        # the user's column, kept in view next to what the job is
-        SheetColumn("Status", 120, centred=True, choices=STATUS_CHOICES),
+        # kept in view while scrolling across: which row, since when, what, the user's status
+        SheetColumn(SEQUENCE_COLUMN, 45, centred=True, marks_closing_soon=True, frozen=True),
+        SheetColumn("First fetched", 105, _first_fetched_date, centred=True, frozen=True),
+        SheetColumn("Role", 300, lambda listing: listing.primary.title, marks_closing_soon=True, frozen=True),
+        SheetColumn("Company", 180, lambda listing: listing.primary.company_name, frozen=True),
+        SheetColumn("Status", 120, centred=True, choices=STATUS_CHOICES, frozen=True),
+        # where to read it, what kind it is, where it was found and its dates
         SheetColumn(LINK_COLUMN, 260, lambda listing: listing.primary.url),
-        SheetColumn(
-            "Why it's valid", 330, lambda listing: verdict_of(listing).valid_because or "", wraps=True
-        ),
-        SheetColumn("JD", 260, lambda listing: (listing.primary.description or "")[:MAX_CELL_CHARACTERS]),
-        SheetColumn("Location", 160, lambda listing: listing.primary.location or ""),
         SheetColumn(
             "Kind", 100, screened(lambda screening: screening.kind), centred=True, choices=KIND_CHOICES
         ),
+        SheetColumn("Found on", 160, _found_on, centred=True, choices=found_on_choices()),
+        SheetColumn("Posted", 95, lambda listing: _date(listing.primary.posted_at), centred=True),
+        SheetColumn(
+            CLOSES_COLUMN, 95, lambda listing: _date(listing.closes_at), centred=True, marks_closing_soon=True
+        ),
+        # why it's on the sheet, and the advert
+        SheetColumn("Why it's valid", 330, lambda listing: _why(verdict_of(listing)), wraps=True),
+        SheetColumn("JD", 260, lambda listing: (listing.primary.description or "")[:MAX_CELL_CHARACTERS]),
+        # further facts
+        SheetColumn("Location", 160, lambda listing: listing.primary.location or ""),
         SheetColumn("Type", 150, lambda listing: listing.primary.employment_type or ""),
-        SheetColumn("Found on", 170, lambda listing: ", ".join(listing.sources)),
+        SheetColumn("Also on", 170, _also_on),
         SheetColumn("Found by", 80, lambda listing: FOUND_BY_AGENT, centred=True, choices=FOUND_BY_CHOICES),
-        # facts: visa and dates
         SheetColumn(
             "Sponsorship in advert",
             140,
@@ -129,16 +169,12 @@ def jobs_columns(
             centred=True,
             choices=LICENCE_CHOICES,
         ),
-        SheetColumn("Closes", 95, lambda listing: _date(listing.closes_at), centred=True),
         SheetColumn("Start", 120, screened(lambda screening: screening.start_date)),
-        SheetColumn("Posted", 95, lambda listing: _date(listing.primary.posted_at), centred=True),
-        SheetColumn("First fetched", 105, lambda listing: _date(_first_fetched(listing)), centred=True),
-        # derived: pay, the screening's verdict, then the user's columns
         SheetColumn("Salary", 150, lambda listing: listing.primary.salary_text or ""),
+        # the screening's verdict, then the user's notes
         SheetColumn(
             "Verdict", 110, lambda listing: verdict_of(listing).verdict, centred=True, choices=VERDICT_CHOICES
         ),
-        SheetColumn("Why", 320, lambda listing: verdict_of(listing).reason),
         SheetColumn("Notes", 220),
         SheetColumn(KEY_COLUMN, 60),
     ]
@@ -146,13 +182,14 @@ def jobs_columns(
 
 def skipped_columns(reason_of: Callable[[Listing], str]) -> list[SheetColumn]:
     return [
-        SheetColumn(SEQUENCE_COLUMN, 45, centred=True),
-        SheetColumn("Role", 300, lambda listing: listing.primary.title),
-        SheetColumn("Company", 180, lambda listing: listing.primary.company_name),
+        SheetColumn(SEQUENCE_COLUMN, 45, centred=True, frozen=True),
+        SheetColumn("First fetched", 105, _first_fetched_date, centred=True, frozen=True),
+        SheetColumn("Role", 300, lambda listing: listing.primary.title, frozen=True),
+        SheetColumn("Company", 180, lambda listing: listing.primary.company_name, frozen=True),
         SheetColumn(LINK_COLUMN, 260, lambda listing: listing.primary.url),
         SheetColumn("Location", 160, lambda listing: listing.primary.location or ""),
-        SheetColumn("Found on", 170, lambda listing: ", ".join(listing.sources)),
-        SheetColumn("First fetched", 105, lambda listing: _date(_first_fetched(listing)), centred=True),
+        SheetColumn("Found on", 160, _found_on, centred=True, choices=found_on_choices()),
+        SheetColumn("Also on", 170, _also_on),
         SheetColumn("Skip reason", 340, reason_of),
         SheetColumn(KEY_COLUMN, 60),
     ]
@@ -203,7 +240,14 @@ def _jobs_order(listing: Listing, verdict_of: VerdictOf) -> tuple[int, bool, str
 def build_rows(columns: list[SheetColumn], listings: list[Listing], user_cells: UserCells) -> list[list[str]]:
     rows = [[column.header for column in columns]]
     for listing in listings:
-        kept = user_cells.by_key.get(listing.key, {})
+        kept = next(
+            (
+                user_cells.by_key[key]
+                for key in (listing.key, *listing.merged_keys)
+                if key in user_cells.by_key
+            ),
+            {},
+        )
         rows.append([_cell(column, listing, kept, len(rows)) for column in columns])
     # the user's own rows, after the agent's, each value under its own header
     for own_row in user_cells.own_rows:

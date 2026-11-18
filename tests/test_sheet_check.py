@@ -6,7 +6,7 @@ import pytest
 
 from job_hunt.job_pipeline.final_verdict import FinalVerdict
 from job_hunt.sheet_sync.sheet_check import check_choices, check_tab
-from job_hunt.sheet_sync.sheet_format import FROZEN_COLUMNS, body_row_pixels
+from job_hunt.sheet_sync.sheet_format import body_row_pixels, frozen_column_count
 from job_hunt.sheet_sync.sheet_rows import LINK_COLUMN, jobs_columns
 
 COLUMNS = jobs_columns(lambda company: "", lambda listing: None, lambda listing: FinalVerdict("apply"))
@@ -34,7 +34,9 @@ def good_metadata() -> dict:
     return {
         "sheets": [
             {
-                "properties": {"gridProperties": {"frozenRowCount": 1, "frozenColumnCount": FROZEN_COLUMNS}},
+                "properties": {
+                    "gridProperties": {"frozenRowCount": 1, "frozenColumnCount": frozen_column_count(COLUMNS)}
+                },
                 "data": [
                     {
                         "columnMetadata": [
@@ -76,7 +78,7 @@ def break_role_alignment(metadata):
 
 
 def leave_dropdown_on_why(metadata):
-    cell(metadata, 2, "Why")["dataValidation"] = {"condition": {"type": "ONE_OF_LIST"}}
+    cell(metadata, 2, "Also on")["dataValidation"] = {"condition": {"type": "ONE_OF_LIST"}}
 
 
 def drop_the_kind_dropdown(metadata):
@@ -100,7 +102,7 @@ def swap_two_headers(metadata):
     "defect, expected",
     [
         (break_role_alignment, "'Role' row 2 is aligned CENTER"),
-        (leave_dropdown_on_why, "'Why' row 3 dropdown is True"),
+        (leave_dropdown_on_why, "'Also on' row 3 dropdown is True"),
         (drop_the_kind_dropdown, "'Kind' row 2 dropdown is False"),
         (unlink_an_advert, "advert link in row 4 isn't clickable"),
         (swap_two_headers, "headers are"),
@@ -124,3 +126,14 @@ def test_a_value_outside_a_columns_dropdown_is_caught_but_the_users_status_is_fr
     assert check_choices("Jobs", [header, row], COLUMNS) == [
         "Jobs: 'Kind' has values outside its dropdown: ['Graduate scheme']"
     ]
+
+
+def test_the_closing_soon_rule_reads_the_closes_column_against_today():
+    from job_hunt.sheet_sync.sheet_format import closing_soon_formula
+
+    closes = [column.header for column in COLUMNS].index("Closes")
+    letter = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"[closes]
+    assert closing_soon_formula(closes) == (
+        f'=AND(${letter}2<>"", DATEVALUE(${letter}2)>=TODAY(), DATEVALUE(${letter}2)<=TODAY()+7)'
+    )
+    assert [column.header for column in COLUMNS if column.marks_closing_soon] == ["#", "Role", "Closes"]

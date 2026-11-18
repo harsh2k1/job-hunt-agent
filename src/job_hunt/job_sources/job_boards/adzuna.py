@@ -21,6 +21,7 @@ class AdzunaSource(SearchApiSource):
     agencies, so it overlaps with others but reaches smaller ones too."""
 
     name = "adzuna"
+    display_name = "Adzuna"
     _source_settings: AdzunaSourceSettings
 
     def _check_credentials(self) -> None:

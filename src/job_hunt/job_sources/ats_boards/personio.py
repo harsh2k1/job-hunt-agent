@@ -21,6 +21,7 @@ class PersonioSource(AtsBoardSource):
     into dicts here so the rest of the source reads like the JSON ATSs."""
 
     ats_platform = AtsPlatform.PERSONIO
+    display_name = "Personio"
     search_domains = BOARD_DOMAINS
 
     @classmethod

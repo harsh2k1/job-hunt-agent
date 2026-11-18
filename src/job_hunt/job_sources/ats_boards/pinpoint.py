@@ -18,6 +18,7 @@ DESCRIPTION_FIELDS = ("description", "key_responsibilities", "skills_knowledge_e
 @register_job_source
 class PinpointSource(AtsBoardSource):
     ats_platform = AtsPlatform.PINPOINT
+    display_name = "Pinpoint"
     search_domains = (BOARD_DOMAIN,)
 
     @classmethod

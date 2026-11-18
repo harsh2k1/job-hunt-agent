@@ -18,7 +18,8 @@ are stored, so a listing is sent again only when its advert changes.
 
 import hashlib
 import json
-from collections.abc import Iterator
+import re
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
 from typing import Literal
 
@@ -37,12 +38,16 @@ from job_hunt.llm.llm_client import LlmClient, LlmError, LlmUsageLimitError
 logger = get_logger(__name__)
 
 # part of every content hash: a change to what's asked re-screens everything
-PROMPT_VERSION = "8"
+PROMPT_VERSION = "9"
 
 APPLY, CHECK, SKIP = "apply", "check", "skip"
 # how an unrelated role's reason starts; such roles aren't shown at all
 UNRELATED_REASON = "Not a related role"
 UNCLEAR_FIELD_REASON = "The advert doesn't say enough to tell the role's field"
+# after a second look (field_recheck.py): still unclear, but plausibly one of the candidate's fields
+PLAUSIBLE_FIELD_REASON = (
+    "The advert doesn't say enough to tell the role's field, but it could be one of yours"
+)
 
 SYSTEM_PROMPT_TEMPLATE = (
     "You read UK job listings and report facts from each listing's text only. Never judge whether "
@@ -68,8 +73,10 @@ SYSTEM_PROMPT_TEMPLATE = (
     "fellowships, freelance or contract gigs the text names as such.\n"
     "part_time: true only if the role is part-time or at most about 20 hours a week.\n"
     "starts_when_free: the candidate is free full-time from {available_from}. 'yes' if the advert's start "
-    "is then or later (a 2027 graduate intake usually starts in September 2027), 'no' if it's earlier or "
-    "as soon as possible, 'not stated' if the advert doesn't say.\n"
+    "is then or later, or a start window or flexible start that reaches it (e.g. 'join between May and "
+    "October 2027', 'flexible start across 2026 or 2027'; a 2027 graduate intake usually starts in "
+    "September 2027); 'no' if it must start earlier or as soon as possible; 'not stated' if the advert "
+    "doesn't say.\n"
     "sponsorship: 'offered' or 'not offered' only if the text says so, else 'not stated'; when "
     "sponsorship_in_text is given, that is what the advert says.\n"
     "start_date: the start as the advert words it, else null."
@@ -120,6 +127,28 @@ def decide(facts: ListingFacts) -> Decision:
     if facts.start_date:
         bullets.append(f"Starts {facts.start_date}")
     return Decision(APPLY, "", "\n".join(f"• {bullet}" for bullet in bullets))
+
+
+# A source that labels the role itself (Gradcracker's "Graduate job",
+# "Placement or internship") is believed over the model's guess from thin
+# text, whichever copy of the listing carries the label; it only settles a
+# guess of a plain full-time or other job. "Full-time" on another copy
+# doesn't contradict "Graduate job", but it does an internship label: one
+# employer's full-time role and internship can share a title.
+GRADUATE_LABEL = re.compile(r"\bgraduate\b", re.IGNORECASE)
+INTERNSHIP_LABEL = re.compile(r"\b(?:intern|internship|placement)s?\b", re.IGNORECASE)
+FULL_TIME_LABEL = re.compile(r"\b(?:full[- ]?time|permanent)\b", re.IGNORECASE)
+
+
+def labelled_kind(employment_types: Iterable[str | None], guessed: RoleKind) -> RoleKind:
+    labels = " | ".join(label for label in employment_types if label)
+    if guessed not in ("full-time", "other") or not labels:
+        return guessed
+    if INTERNSHIP_LABEL.search(labels) and not FULL_TIME_LABEL.search(labels):
+        return "internship"
+    if GRADUATE_LABEL.search(labels):
+        return "graduate"
+    return guessed
 
 
 @dataclass
@@ -173,6 +202,13 @@ class LlmScreening:
         report.to_screen = len(due)
         batch_listings = due[: self._settings.max_listings_per_run]
         report.deferred = len(due) - len(batch_listings)
+        # read by the cheap model on an earlier run that stopped (a usage
+        # limit) before the stronger one could take its second look
+        unfinished = [
+            listing
+            for listing in listings
+            if listing not in due and self._second_look_pending(listing, stored.get(listing.key))
+        ][: self._settings.max_listings_per_run]
         # facts gathered so far survive a usage limit hit midway
         facts: dict[str, tuple[ListingFacts, str]] = {}
         try:
@@ -181,7 +217,7 @@ class LlmScreening:
                 listing
                 for listing in batch_listings
                 if listing.key in facts and self._needs_second_look(listing, facts[listing.key][0])
-            ]
+            ] + unfinished
             report.sent_to_second_pass = len(doubtful)
             self._run_pass(doubtful, self._settings.second_pass_model, report, facts)
         except LlmUsageLimitError as error:
@@ -197,6 +233,15 @@ class LlmScreening:
     def _needs_second_look(self, listing: Listing, listing_facts: ListingFacts) -> bool:
         return listing_facts.related == "unclear" or (
             listing_facts.related == "no" and self._title_rules.rule(listing.primary.title) == "keep"
+        )
+
+    # the same test on a stored verdict, as long as only the cheap model gave it
+    def _second_look_pending(self, listing: Listing, stored: ListingScreening | None) -> bool:
+        if stored is None or stored.model != self._settings.first_pass_model:
+            return False
+        return stored.reason == UNCLEAR_FIELD_REASON or (
+            stored.reason.startswith(UNRELATED_REASON)
+            and self._title_rules.rule(listing.primary.title) == "keep"
         )
 
     def _is_due(self, listing: Listing, stored: ListingScreening | None) -> bool:
@@ -275,7 +320,9 @@ class LlmScreening:
                     reason=decision.reason,
                     valid_because=decision.valid_because,
                     role_field=listing_facts.role_field,
-                    kind=listing_facts.kind,
+                    kind=labelled_kind(
+                        (job.employment_type for job in listing.sightings), listing_facts.kind
+                    ),
                     part_time=listing_facts.part_time,
                     starts_when_free=listing_facts.starts_when_free,
                     # the rule reads the whole advert, so where it finds an answer it wins

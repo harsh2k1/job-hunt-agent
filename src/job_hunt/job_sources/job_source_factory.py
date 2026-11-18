@@ -6,8 +6,10 @@ from job_hunt.common.settings_schema import Settings
 import job_hunt.job_sources.advert_pages  # noqa: F401  # isort: skip
 import job_hunt.job_sources.ats_boards  # noqa: F401  # isort: skip
 import job_hunt.job_sources.email_alerts  # noqa: F401  # isort: skip
+import job_hunt.job_sources.employer_adverts  # noqa: F401  # isort: skip
 import job_hunt.job_sources.job_boards  # noqa: F401  # isort: skip
 import job_hunt.job_sources.portals  # noqa: F401  # isort: skip
+import job_hunt.job_sources.saved_pages  # noqa: F401  # isort: skip
 from job_hunt.job_sources.job_source import JobSource, job_source_registry
 
 UNRANKED_LISTING = 99
@@ -30,6 +32,18 @@ class JobSourceFactory:
             return UNRANKED_LISTING
 
     @staticmethod
+    def source_class(source_name: str) -> type[JobSource]:
+        return job_source_registry.get(source_name)
+
+    # how the sheet names a source; one no longer registered keeps its name
+    @staticmethod
+    def display_name(source_name: str) -> str:
+        try:
+            return job_source_registry.get(source_name).display_name
+        except UnknownRegistryEntryError:
+            return source_name
+
+    @staticmethod
     def is_enabled(source_name: str, settings: Settings = app_settings) -> bool:
         return getattr(settings.job_sources, source_name).enabled
 
@@ -47,4 +61,4 @@ class JobSourceFactory:
         if source_names is None:
             source_names = [name for name in job_source_registry.names() if cls.is_enabled(name, settings)]
         sources = [cls.create(name, settings) for name in source_names]
-        return sorted(sources, key=lambda source: source.reads_tracked_companies)
+        return sorted(sources, key=lambda source: (source.reads_tracked_companies, source.reads_stored_jobs))

@@ -1,5 +1,7 @@
 from datetime import datetime, timezone
 
+import pytest
+
 from job_hunt.common.settings import settings
 from job_hunt.job_pipeline.listings import Listing
 from job_hunt.job_pipeline.llm_screening import ListingFacts, LlmScreening, ScreeningReply, decide
@@ -199,3 +201,39 @@ def test_unrelated_with_a_data_or_ai_title_is_double_checked_by_the_stronger_mod
     # 'AI' is a keep term: a second look; plain 'Software Engineer' isn't
     assert llm.calls == [("haiku", 2), ("sonnet", 1)]
     assert stored(database, "ai").model == "sonnet"
+
+
+def test_a_second_look_cut_short_by_the_usage_limit_happens_on_the_next_run(database):
+    listings = [listing("a", "Data Scientist"), listing("b", "thin advert")]
+    # the limit is hit right after the cheap model's read
+    make_screening(database, FakeLlm(usage_limit_after=1), batch_size=10).screen(listings)
+    assert stored(database, "b").model == "haiku"
+    llm = FakeLlm()
+    make_screening(database, llm, batch_size=10).screen(listings)
+    # only the waiting one goes, and only to the stronger model
+    assert llm.calls == [("sonnet", 1)]
+    assert (stored(database, "b").fit, stored(database, "b").model) == ("apply", "sonnet")
+    # done: a third run asks nothing
+    third = FakeLlm()
+    make_screening(database, third, batch_size=10).screen(listings)
+    assert third.calls == []
+
+
+@pytest.mark.parametrize(
+    "label, guessed, kind",
+    [
+        (["Graduate job"], "full-time", "graduate"),
+        (["Placement or internship"], "full-time", "internship"),
+        (["Graduate job"], "part-time", "part-time"),
+        (["Full-time"], "full-time", "full-time"),
+        ([None], "other", "other"),
+        # Google Jobs' copy says "Full-time", Gradcracker's says "Graduate job"
+        (["Full-time", "Graduate job"], "full-time", "graduate"),
+        # Mistral: a full-time role and an internship with the same title
+        (["FullTime", "Intern"], "full-time", "full-time"),
+    ],
+)
+def test_a_sources_own_label_settles_a_plain_full_time_guess(label, guessed, kind):
+    from job_hunt.job_pipeline.llm_screening import labelled_kind
+
+    assert labelled_kind(label, guessed) == kind

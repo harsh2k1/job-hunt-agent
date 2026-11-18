@@ -105,3 +105,47 @@ def test_registered_sources_have_ranks():
         ]
     )
     assert [sighting.source for sighting in listing.sightings] == ["greenhouse", "linkedin", "gone_source"]
+
+
+def test_a_sighting_naming_only_the_country_joins_the_one_city_listing(builder):
+    # Cambridge Consultants on Greenhouse says "United Kingdom", on Gradcracker "Cambridge"
+    listings = builder.build(
+        [
+            job(
+                "greenhouse", "Graduate AI Engineer (2027 start) ", "Cambridge Consultants", "United Kingdom"
+            ),
+            job("linkedin", "Graduate AI Engineer (2027 start)", "Cambridge Consultants", "London"),
+            job("email_alerts", "Graduate AI Engineer", "Cambridge Consultants", None),
+        ]
+    )
+    assert len(listings) == 1
+    assert listings[0].key.endswith("|london")
+    assert listings[0].primary.source == "greenhouse"
+
+
+def test_with_several_cities_a_country_wide_sighting_stays_apart(builder):
+    # which city the "UK" one is can't be told
+    listings = builder.build(
+        [
+            job("linkedin", "Data Science Graduate Scheme", "Lloyds Banking Group", "London"),
+            job("greenhouse", "Data Science Graduate Scheme", "Lloyds Banking Group", "Manchester"),
+            job(
+                "serpapi_google_jobs",
+                "Data Science Graduate Scheme",
+                "Lloyds Banking Group",
+                "United Kingdom",
+            ),
+        ]
+    )
+    assert len(listings) == 3
+
+
+def test_copies_that_all_name_only_the_country_are_one_listing(builder):
+    # National Grid: "Warwick, England, UK" on LinkedIn, "Warwick, ENG, UK" on Indeed
+    listings = builder.build(
+        [
+            job("linkedin", "Graduate Data Specialist", "National Grid", "Warwick, England, UK"),
+            job("indeed", "Graduate Data Specialist", "National Grid", "Warwick, UK"),
+        ]
+    )
+    assert len(listings) == 1

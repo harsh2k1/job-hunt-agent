@@ -35,6 +35,7 @@ class SerpApiGoogleJobsSource(JobSource[GoogleJobsPosting]):
     """
 
     name = "serpapi_google_jobs"
+    display_name = "Google Jobs"
     listing_rank = 60
 
     def __init__(

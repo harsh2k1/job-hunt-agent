@@ -16,6 +16,7 @@ EMBEDDED_BOARD_PATH = "/embed/job_board"
 @register_job_source
 class GreenhouseSource(AtsBoardSource):
     ats_platform = AtsPlatform.GREENHOUSE
+    display_name = "Greenhouse"
     search_domains = tuple(sorted(BOARD_HOSTS))
 
     @classmethod

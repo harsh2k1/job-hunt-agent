@@ -17,6 +17,7 @@ NON_BOARD_PATH_SEGMENTS = frozenset({"j", "api"})
 @register_job_source
 class WorkableSource(AtsBoardSource):
     ats_platform = AtsPlatform.WORKABLE
+    display_name = "Workable"
     search_domains = (BOARD_HOST,)
 
     @classmethod

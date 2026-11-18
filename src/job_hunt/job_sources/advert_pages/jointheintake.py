@@ -20,6 +20,7 @@ class JoinTheIntakeSource(SitemapAdvertPageSource):
     """
 
     name = "jointheintake"
+    display_name = "JoinTheIntake"
     sitemap_url = "https://www.jointheintake.com/sitemap.xml"
     _source_settings: JoinTheIntakeSourceSettings
 

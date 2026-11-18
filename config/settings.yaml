@@ -276,6 +276,45 @@ default:
     # by a person (passkey / 2FA), later runs reuse it. Login in
     # .secrets.yaml under portal_logins.kcl (only used to fill the username,
     # and the password if King's asks for one).
+    # Gradcracker sits behind a bot check, so it isn't fetched: its search
+    # result pages are saved from a browser into a folder per day and read
+    # from there. No advert text is on them; the card's facts are used.
+    gradcracker:
+      enabled: true
+      pages_dir: "@format {this.REPO_ROOT}/data/gradcracker-jobs"
+      listed_without_deadline_days: 60
+
+    # The employer's own advert for a listing that has no advert text
+    # (Gradcracker cards): a web search for its title and employer, accepted
+    # only when a result page's JobPosting markup names the same employer
+    # and nearly the same title. The JD then shows on the listing, and a
+    # company board the page links to is tracked from then on.
+    employer_adverts:
+      enabled: true
+      for_sources: [gradcracker]
+      max_searches_per_run: 40
+      results_per_search: 6
+      seconds_between_searches: 12
+      max_consecutive_failures: 3
+      search_again_after_days: 14
+      page_cache_ttl_hours: 168
+      min_title_overlap: 0.7
+      skipped_hosts:
+        - gradcracker.com
+        # answer 403 to anything but a browser
+        - brightnetwork.co.uk
+        - jobteaser.com
+        - linkedin.com
+        - indeed.com
+        - glassdoor.co.uk
+        - glassdoor.com
+        - facebook.com
+        - x.com
+        - twitter.com
+        - youtube.com
+        - reddit.com
+      listed_without_deadline_days: 60
+
     kcl_target_connect:
       enabled: true
       browser_profile_dir: "@format {this.REPO_ROOT}/data/browser_profiles/kcl_target_connect"
@@ -713,3 +752,5 @@ testing:
     kcl_target_connect:
       # tests never open a browser window
       allow_visible_sign_in: false
+    employer_adverts:
+      seconds_between_searches: 0

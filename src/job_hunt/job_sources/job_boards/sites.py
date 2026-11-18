@@ -9,12 +9,14 @@ from job_hunt.job_sources.job_source import register_job_source
 @register_job_source
 class IndeedSource(JobSpySource):
     name = "indeed"
+    display_name = "Indeed"
     jobspy_site_name = "indeed"
 
 
 @register_job_source
 class LinkedInSource(JobSpySource):
     name = "linkedin"
+    display_name = "LinkedIn"
     jobspy_site_name = "linkedin"
     _source_settings: LinkedInSourceSettings
 
@@ -28,12 +30,14 @@ class LinkedInSource(JobSpySource):
 @register_job_source
 class GlassdoorSource(JobSpySource):
     name = "glassdoor"
+    display_name = "Glassdoor"
     jobspy_site_name = "glassdoor"
 
 
 @register_job_source
 class GoogleJobsSource(JobSpySource):
     name = "google_jobs"
+    display_name = "Google Jobs"
     jobspy_site_name = "google"
     _source_settings: GoogleJobsSourceSettings
 

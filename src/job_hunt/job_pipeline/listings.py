@@ -20,6 +20,9 @@ from job_hunt.job_store.models import StoredJob
 # "(m/f/d)", "[Remote]", "(2027 start)": noise when comparing titles
 BRACKETED = re.compile(r"[(\[{][^)\]}]*[)\]}]")
 NON_WORD = re.compile(r"[^a-z0-9]+")
+# a place that names the country, not where the job is: one source says
+# "United Kingdom" where another says "Cambridge" for the same advert
+BROAD_PLACES = frozenset({"", "uk", "united kingdom", "england", "great britain", "britain"})
 
 
 @dataclass(frozen=True)
@@ -27,6 +30,9 @@ class Listing:
     key: str
     # every sighting, the most direct source first
     sightings: tuple[StoredJob, ...]
+    # keys this listing had before sightings of it were merged in (a broad
+    # place joined its city), so what was kept under them still finds it
+    merged_keys: tuple[str, ...] = ()
 
     @property
     def primary(self) -> StoredJob:
@@ -64,9 +70,40 @@ class ListingBuilder:
         for job in jobs:
             key = self.listing_key(job) or f"{job.source}:{job.source_job_id}"
             groups.setdefault(key, []).append(job)
-        return [Listing(key, tuple(sorted(group, key=self._preference))) for key, group in groups.items()]
+        merged = _merge_broad_places(groups)
+        return [
+            Listing(key, tuple(sorted(group, key=self._preference)), tuple(merged.get(key, ())))
+            for key, group in groups.items()
+        ]
 
     # most direct source first; then the sighting with an advert text; then
     # the most recently seen
     def _preference(self, job: StoredJob) -> tuple[int, bool, float]:
         return (self._source_rank(job.source), job.description is None, -job.last_seen_at.timestamp())
+
+
+# The same role at the same employer, once with a city and once with only
+# the country (or no place), is one advert: the broad sightings join the
+# city's listing; sightings that all name only the country ("England",
+# "UK") are one listing too. With several cities (a scheme in Leeds and
+# Edinburgh) it's unclear which the broad one is, so nothing is merged.
+# Returns city key -> the broad keys merged into it.
+def _merge_broad_places(groups: dict[str, list[StoredJob]]) -> dict[str, list[str]]:
+    merged: dict[str, list[str]] = {}
+    keys_by_role: dict[tuple[str, str], list[str]] = {}
+    for key in groups:
+        parts = key.split("|")
+        if len(parts) == 3:
+            keys_by_role.setdefault((parts[0], parts[1]), []).append(key)
+    for keys in keys_by_role.values():
+        cities = [key for key in keys if key.rsplit("|", 1)[1] not in BROAD_PLACES]
+        broad = [key for key in keys if key.rsplit("|", 1)[1] in BROAD_PLACES]
+        if len(cities) > 1 or not broad:
+            continue
+        # into the city, or into the first broad one when there's no city
+        target, rest = (cities[0], broad) if cities else (broad[0], broad[1:])
+        if rest:
+            for key in rest:
+                groups[target].extend(groups.pop(key))
+            merged[target] = rest
+    return merged

@@ -22,6 +22,7 @@ class TeamtailorSource(AtsBoardSource):
     their own domain (careers.example.com) can't be recognised from a link."""
 
     ats_platform = AtsPlatform.TEAMTAILOR
+    display_name = "Teamtailor"
     search_domains = (BOARD_DOMAIN,)
 
     @classmethod

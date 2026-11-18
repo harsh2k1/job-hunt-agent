@@ -13,6 +13,7 @@ class StudentCircusSource(SitemapAdvertPageSource):
     """
 
     name = "student_circus"
+    display_name = "Student Circus"
     sitemap_url = "https://studentcircus.com/sitemap/job-sitemap.xml"
     # every entry carries the same date, so it says nothing about changes
     sitemap_dates_are_per_advert = False

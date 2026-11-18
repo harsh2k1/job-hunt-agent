@@ -18,6 +18,7 @@ class BambooHrSource(AtsBoardSource):
     adverts worth reading."""
 
     ats_platform = AtsPlatform.BAMBOOHR
+    display_name = "BambooHR"
     search_domains = (BOARD_DOMAIN,)
 
     @classmethod

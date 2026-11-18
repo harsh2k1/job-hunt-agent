@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from collections.abc import Iterable
+from datetime import datetime
 from typing import ClassVar, Generic, TypeVar
 
 from pydantic import SecretStr, ValidationError
@@ -36,9 +37,14 @@ class JobSource(ABC, Generic[RawPostingT]):
 
     # registered name; also stored on every job as FetchedJob.source
     name: ClassVar[str]
+    # how people know the site, shown on the sheet ("LinkedIn", "jobs.ac.uk")
+    display_name: ClassVar[str]
     # Sources that read the tracked-company list run after the ones that add
     # to it, so a company found on a job board is read in the same run.
     reads_tracked_companies: ClassVar[bool] = False
+    # Sources that work from jobs other sources stored run after those,
+    # and before the ones reading tracked companies (they may add some).
+    reads_stored_jobs: ClassVar[bool] = False
     # When several sources list the same advert, the lowest rank is shown:
     # the more direct the source, the more complete and current its copy.
     # 10 company ATS boards, 20 big employers' careers sites, 30 advert-page
@@ -50,9 +56,25 @@ class JobSource(ABC, Generic[RawPostingT]):
     @abstractmethod
     def from_settings(cls, settings: Settings) -> "JobSource": ...
 
+    # A job a source stops listing has usually closed, so it drops off the
+    # sheet a few days later. A source that only sees part of a site (pages
+    # the user saved) returns the time from which its jobs stay listed even
+    # unseen; its jobs with a deadline stay until the deadline.
+    @classmethod
+    def unseen_jobs_listed_since(cls, settings: Settings, now: datetime) -> datetime | None:
+        return None
+
+    # The jobs found, with when they were seen (None: now). A source reading
+    # saved snapshots says when each snapshot was taken.
+    def fetch_job_batches(self) -> list[tuple[datetime | None, list[FetchedJob]]]:
+        return [(None, self.fetch_jobs())]
+
     def fetch_jobs(self) -> list[FetchedJob]:
+        return self._read_postings(self._list_raw_postings())
+
+    def _read_postings(self, raw_postings: Iterable[RawPostingT]) -> list[FetchedJob]:
         fetched_jobs = []
-        for raw_posting in self._list_raw_postings():
+        for raw_posting in raw_postings:
             if not self._is_in_scope(raw_posting):
                 continue
             try:

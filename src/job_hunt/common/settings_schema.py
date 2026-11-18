@@ -179,6 +179,36 @@ class JobsAcUkSourceSettings(AdvertPageSourceSettings):
     search_cache_ttl_hours: float = Field(gt=0)
 
 
+class GradcrackerSourceSettings(StrictModel):
+    enabled: bool
+    # result pages saved from a browser, in one folder per day (17-11-2026)
+    pages_dir: Path
+    # a job with no deadline ("Ongoing") stays listed this long after the
+    # last saved page that showed it; one with a deadline, until then
+    listed_without_deadline_days: int = Field(ge=1)
+
+
+class EmployerAdvertsSourceSettings(StrictModel):
+    enabled: bool
+    # the sources whose listings have no advert text and are looked up
+    for_sources: list[str] = Field(min_length=1)
+    # web searches a run may spend; the rest wait for the next run
+    max_searches_per_run: int = Field(ge=0)
+    results_per_search: int = Field(gt=0)
+    seconds_between_searches: float = Field(ge=0)
+    # this many failed searches in a row stops the run: the engine is pushing back
+    max_consecutive_failures: int = Field(gt=0)
+    # a listing with no copy found is searched again after this long
+    search_again_after_days: int = Field(gt=0)
+    page_cache_ttl_hours: float = Field(gt=0)
+    # share of the card's title words the advert's title must have
+    min_title_overlap: float = Field(gt=0, le=1)
+    # results never read: job boards read as sources anyway, or that need a login
+    skipped_hosts: list[str]
+    # as long as the listing it copies (see gradcracker)
+    listed_without_deadline_days: int = Field(ge=1)
+
+
 class EmailAlertsSourceSettings(StrictModel):
     enabled: bool
     # the OAuth client downloaded from Google Cloud (gitignored)
@@ -244,6 +274,8 @@ class JobSourcesSettings(StrictModel):
     student_circus: AdvertPageSourceSettings
     meta_careers: AdvertPageSourceSettings
     email_alerts: EmailAlertsSourceSettings
+    gradcracker: GradcrackerSourceSettings
+    employer_adverts: EmployerAdvertsSourceSettings
     kcl_target_connect: KclTargetConnectSourceSettings
     greenhouse: AtsSourceSettings
     lever: AtsSourceSettings

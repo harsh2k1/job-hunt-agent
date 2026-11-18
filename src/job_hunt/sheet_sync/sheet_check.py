@@ -3,7 +3,7 @@ have, so a broken sheet is caught by the run, not by the user."""
 
 import gspread
 
-from job_hunt.sheet_sync.sheet_format import FROZEN_COLUMNS, body_row_pixels
+from job_hunt.sheet_sync.sheet_format import body_row_pixels, frozen_column_count
 from job_hunt.sheet_sync.sheet_rows import KEY_COLUMN, LINK_COLUMN, SheetColumn
 
 # rows read back per tab: enough to catch a column-wide problem
@@ -32,7 +32,7 @@ def check_tab(worksheet: gspread.Worksheet, columns: list[SheetColumn]) -> list[
     expected_headers = [column.header for column in columns]
     if headers != expected_headers:
         return [f"{title}: headers are {headers}, expected {expected_headers}"]
-    if grid.get("frozenRowCount") != 1 or grid.get("frozenColumnCount") != FROZEN_COLUMNS:
+    if grid.get("frozenRowCount") != 1 or grid.get("frozenColumnCount") != frozen_column_count(columns):
         problems.append(
             f"{title}: frozen panes are {grid.get('frozenRowCount')} rows / "
             f"{grid.get('frozenColumnCount')} columns"

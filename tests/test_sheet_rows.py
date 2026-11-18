@@ -38,15 +38,20 @@ def test_jobs_tab_has_numbered_rows_in_a_fixed_column_order():
     )
     header = rows[0]
     assert header == [
-        "#", "Role", "Company", "Status", "Advert link", "Why it's valid", "JD", "Location", "Kind", "Type",
-        "Found on", "Found by", "Sponsorship in advert", "Sponsor licence", "Closes", "Start", "Posted",
-        "First fetched", "Salary", "Verdict", "Why", "Notes", KEY_COLUMN,
+        "#", "First fetched", "Role", "Company", "Status", "Advert link", "Kind", "Found on", "Posted",
+        "Closes", "Why it's valid", "JD", "Location", "Type", "Also on", "Found by", "Sponsorship in advert",
+        "Sponsor licence", "Start", "Salary", "Verdict", "Notes", KEY_COLUMN,
+    ]  # fmt: skip
+    # the row, since when, what it is and the user's status stay in view
+    assert [column.header for column in COLUMNS if column.frozen] == [
+        "#", "First fetched", "Role", "Company", "Status"
     ]  # fmt: skip
     assert header[-1] == KEY_COLUMN
     assert [row[0] for row in rows[1:]] == ["1", "2", "3"]
     assert [row[header.index("Role")] for row in rows[1:]] == ["Closes soon", "Closes later", "No deadline"]
     assert rows[1][header.index("Verdict")] == "not screened yet"
     assert rows[1][header.index("Found by")] == "agent"
+    assert rows[1][header.index("Found on")] == "Greenhouse"
 
 
 def test_the_users_cells_and_own_rows_survive_even_a_new_column_order():
@@ -86,3 +91,49 @@ def test_notes_follow_a_listing_between_jobs_and_to_check():
     merged = merge_user_cells(jobs, checks)
     assert merged.by_key["a"]["Notes"] == "via Sam"
     assert [row["Role"] for row in merged.own_rows] == ["Mine"]
+
+
+def test_found_on_names_each_site_as_people_know_it_and_every_one_has_a_colour():
+    from job_hunt.job_sources.job_source_factory import JobSourceFactory
+    from job_hunt.sheet_sync.sheet_rows import found_on_choices
+
+    choices = found_on_choices()
+    assert {
+        "Greenhouse",
+        "LinkedIn",
+        "jobs.ac.uk",
+        "Gradcracker",
+        "KCL Target Connect",
+        "Google Jobs",
+    } <= set(choices)
+    for name in JobSourceFactory.registered_source_names():
+        assert JobSourceFactory.display_name(name) in choices
+        assert "_" not in JobSourceFactory.display_name(name)
+
+
+def test_also_on_lists_the_other_sites_with_the_same_advert():
+    from job_hunt.sheet_sync.sheet_rows import _also_on, _found_on
+
+    board = listing("a", "Data Scientist").primary
+    alert = board.model_copy(update={"source": "email_alerts", "source_job_id": "x"})
+    google = board.model_copy(update={"source": "serpapi_google_jobs", "source_job_id": "y"})
+    both = Listing("a", (board, alert, google))
+    assert (_found_on(both), _also_on(both)) == ("Greenhouse", "Email alerts, Google Jobs")
+
+
+def test_why_it_s_valid_holds_the_bullets_or_what_to_check():
+    from job_hunt.sheet_sync.sheet_rows import _why
+
+    assert _why(FinalVerdict("apply", valid_because="• Graduate role")) == "• Graduate role"
+    assert _why(FinalVerdict("check", "Internship: confirm it's part-time")) == (
+        "To check: Internship: confirm it's part-time"
+    )
+
+
+def test_a_status_kept_under_a_merged_listing_key_stays_with_the_listing():
+    # marked Applied while only the "United Kingdom" copy was known; a city copy then arrived
+    user_cells = read_user_cells([["Status", KEY_COLUMN], ["Applied", "acme|graduate data scientist|uk"]])
+    merged = Listing("acme|graduate data scientist|london", listing("a", "Graduate Data Scientist").sightings,
+                     merged_keys=("acme|graduate data scientist|uk",))  # fmt: skip
+    rows = build_jobs_rows([merged], COLUMNS, user_cells, NO_VERDICT)
+    assert rows[1][rows[0].index("Status")] == "Applied"

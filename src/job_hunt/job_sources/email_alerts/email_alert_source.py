@@ -26,6 +26,7 @@ class EmailAlertSource(JobSource[AlertedJob]):
     """
 
     name = "email_alerts"
+    display_name = "Email alerts"
     listing_rank = 70
 
     def __init__(self, source_settings: EmailAlertsSourceSettings, mailbox: Mailbox, cache: Cache):

@@ -40,6 +40,7 @@ class WorkdaySource(AtsBoardSource):
     """
 
     ats_platform = AtsPlatform.WORKDAY
+    display_name = "Workday"
     search_domains = (BOARD_DOMAIN,)
     _source_settings: WorkdaySourceSettings
 

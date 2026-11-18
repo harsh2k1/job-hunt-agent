@@ -16,6 +16,7 @@ BOARD_API_URL = "https://{board_slug}.recruitee.com/api/offers/"
 @register_job_source
 class RecruiteeSource(AtsBoardSource):
     ats_platform = AtsPlatform.RECRUITEE
+    display_name = "Recruitee"
     search_domains = (BOARD_DOMAIN,)
 
     @classmethod

@@ -19,6 +19,7 @@ class ReedSource(SearchApiSource):
     lot of graduate schemes and agency roles the other boards don't."""
 
     name = "reed"
+    display_name = "Reed"
     _source_settings: ReedSourceSettings
 
     def _check_credentials(self) -> None:

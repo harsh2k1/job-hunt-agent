@@ -5,6 +5,7 @@ from job_hunt.common.settings_schema import Settings
 from job_hunt.job_pipeline.listings import Listing, ListingBuilder
 from job_hunt.job_pipeline.title_rules import TitleRules
 from job_hunt.job_pipeline.title_screening import title_key, title_question
+from job_hunt.job_sources.job_source_factory import JobSourceFactory
 from job_hunt.job_sources.location_matching import TargetLocationMatcher
 from job_hunt.job_store.job_repository import JobRepository
 from job_hunt.job_store.title_screening_repository import TitleScreeningRepository
@@ -30,7 +31,11 @@ def live_listings(
 ) -> LiveListings:
     builder = ListingBuilder(TargetLocationMatcher(settings.job_search.target_location_keywords))
     listings = builder.build(
-        job_repository.list_jobs_seen_since(now - timedelta(days=settings.google_sheet.listing_days))
+        job_repository.list_jobs_seen_since(
+            now - timedelta(days=settings.google_sheet.listing_days),
+            _partial_view_sources(settings, now),
+            now,
+        )
     )
     rules = TitleRules(settings.title_rules)
     _, question_hash = title_question(settings.llm_screening)
@@ -48,3 +53,13 @@ def live_listings(
         else:
             kept.append(listing)
     return LiveListings(kept, skipped)
+
+
+# sources that only see part of a site: from when their unseen jobs stay listed
+def _partial_view_sources(settings: Settings, now: datetime) -> dict[str, datetime]:
+    listed_since = {}
+    for source_name in JobSourceFactory.registered_source_names():
+        since = JobSourceFactory.source_class(source_name).unseen_jobs_listed_since(settings, now)
+        if since is not None:
+            listed_since[source_name] = since
+    return listed_since

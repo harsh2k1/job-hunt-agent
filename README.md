@@ -67,6 +67,26 @@ job-hunt show-settings                    # the settings this run would use
 job-hunt clear-cache                      # drop every cached response
 ```
 
+### Gradcracker (saved pages)
+
+Gradcracker answers automated requests with a bot check, so its result pages
+are saved from a browser instead: one folder per day under
+`data/gradcracker-jobs/` named for the day (`18-11-2026/`), any `.html` file
+names (`Grad-AI-Page1.html`, `Intern-DS-Page1.html`). `job-hunt run` (or
+`job-hunt fetch --source gradcracker`) reads every folder; a job counts as
+seen on the day of the folder it's in. Saving just page 1, sorted by date
+posted, each day is enough: a job stays listed until its deadline, or 60
+days after it was last saved if it has none ("Ongoing").
+
+The cards carry no advert text, so each card the sheet would show gets one
+web search for its title and employer (source `employer_adverts`, about 40 a
+run). A result is used only when the page's own title matches, it names the
+same employer and it holds a real advert; only pages a site's robots.txt
+allows are read. The employer's copy then joins the card's listing, so its
+JD is shown and screened, and a company job board it's on is tracked from
+then on. Cards with no copy found keep their card facts and are searched
+again after 14 days.
+
 ### Running it automatically
 
 ```bash

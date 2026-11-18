@@ -8,7 +8,7 @@ told."""
 from dataclasses import dataclass
 
 from job_hunt.job_pipeline.eligibility import eligibility, sponsorship_rule
-from job_hunt.job_pipeline.llm_screening import UNCLEAR_FIELD_REASON, UNRELATED_REASON
+from job_hunt.job_pipeline.llm_screening import PLAUSIBLE_FIELD_REASON, UNCLEAR_FIELD_REASON, UNRELATED_REASON
 from job_hunt.job_store.models import ListingScreening
 
 NOT_SCREENED = "not screened yet"
@@ -40,7 +40,7 @@ def final_verdict(screening: ListingScreening | None, licence: str, visa_ends: s
     visa = sponsorship_rule(kind, part_time, screening.sponsorship, licence, visa_ends, screening.role_end)
     if visa.eligible is False:
         return FinalVerdict("skip", f"Not applicable: {visa.reason}")
-    if screening.reason == UNCLEAR_FIELD_REASON:
+    if screening.reason in (UNCLEAR_FIELD_REASON, PLAUSIBLE_FIELD_REASON):
         return FinalVerdict("check", screening.reason)
     for rule in (timing, visa):
         if rule.eligible is None:

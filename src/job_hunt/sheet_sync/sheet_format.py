@@ -4,11 +4,12 @@ every column with fixed values (Status, Kind, Verdict, ...). Applied in
 one batch request per sync; anything a previous sync added (colour rules,
 banding) is removed first, so nothing piles up."""
 
+from collections.abc import Mapping
 from typing import Any
 
 import gspread
 
-from job_hunt.sheet_sync.sheet_rows import KEY_COLUMN, LINK_COLUMN, SheetColumn
+from job_hunt.sheet_sync.sheet_rows import CLOSES_COLUMN, KEY_COLUMN, LINK_COLUMN, SheetColumn
 
 HEADER_BACKGROUND = {"red": 0.17, "green": 0.24, "blue": 0.36}
 WHITE = {"red": 1, "green": 1, "blue": 1}
@@ -24,12 +25,16 @@ PASTELS = {
     "purple": {"red": 0.91, "green": 0.87, "blue": 0.97},
     "grey": {"red": 0.92, "green": 0.92, "blue": 0.92},
 }
+# a deadline within this many days turns its row's #, Role and Closes red
+CLOSING_SOON_DAYS = 7
+CLOSING_SOON_FORMAT = {
+    "backgroundColor": {"red": 0.98, "green": 0.78, "blue": 0.78},
+    "textFormat": {"bold": True, "foregroundColor": {"red": 0.6, "green": 0.0, "blue": 0.0}},
+}
 HEADER_ROW_PIXELS = 34
 BODY_ROW_PIXELS = 24
 # a tab with a wrapping column shows up to four lines of it per row
 WRAPPED_ROW_PIXELS = 72
-# #, Role, Company and Status stay in view while scrolling across
-FROZEN_COLUMNS = 4
 
 
 def format_tab(worksheet: gspread.Worksheet, columns: list[SheetColumn], rows: list[list[str]]) -> None:
@@ -39,7 +44,7 @@ def format_tab(worksheet: gspread.Worksheet, columns: list[SheetColumn], rows: l
         # every cell back to plain: a format or dropdown an earlier layout
         # put on a column must not stay behind on whatever moved there
         _reset_all_cells(sheet_id, row_count, len(columns)),
-        _frozen_panes(sheet_id),
+        _frozen_panes(sheet_id, frozen_column_count(columns)),
         _row_heights(sheet_id, 0, 1, HEADER_ROW_PIXELS),
         _row_heights(sheet_id, 1, row_count, body_row_pixels(columns)),
         _cells(sheet_id, 0, 1, 0, len(columns), _header_format()),
@@ -60,6 +65,8 @@ def format_tab(worksheet: gspread.Worksheet, columns: list[SheetColumn], rows: l
     headers = [column.header for column in columns]
     if LINK_COLUMN in headers:
         requests.append(_clickable_links(sheet_id, headers.index(LINK_COLUMN), rows))
+    if CLOSES_COLUMN in headers:
+        requests += _closing_soon(sheet_id, columns, headers.index(CLOSES_COLUMN), row_count)
     worksheet.spreadsheet.batch_update({"requests": requests})
 
 
@@ -136,12 +143,17 @@ def body_row_pixels(columns: list[SheetColumn]) -> int:
     return WRAPPED_ROW_PIXELS if any(column.wraps for column in columns) else BODY_ROW_PIXELS
 
 
-def _frozen_panes(sheet_id: int) -> dict[str, Any]:
+# the columns marked frozen, which lead the tab
+def frozen_column_count(columns: list[SheetColumn]) -> int:
+    return sum(1 for column in columns if column.frozen)
+
+
+def _frozen_panes(sheet_id: int, frozen_columns: int) -> dict[str, Any]:
     return {
         "updateSheetProperties": {
             "properties": {
                 "sheetId": sheet_id,
-                "gridProperties": {"frozenRowCount": 1, "frozenColumnCount": FROZEN_COLUMNS},
+                "gridProperties": {"frozenRowCount": 1, "frozenColumnCount": frozen_columns},
             },
             "fields": "gridProperties(frozenRowCount,frozenColumnCount)",
         }
@@ -188,8 +200,9 @@ def _banding(sheet_id: int, row_count: int, column_count: int) -> dict[str, Any]
     }
 
 
+# one rule per coloured value; a value without a colour gets none
 def _choice_colours(
-    sheet_id: int, column: int, row_count: int, choices: dict[str, str]
+    sheet_id: int, column: int, row_count: int, choices: Mapping[str, str | None]
 ) -> list[dict[str, Any]]:
     return [
         {
@@ -205,12 +218,47 @@ def _choice_colours(
             }
         }
         for value, colour in choices.items()
+        if colour is not None
+    ]
+
+
+# Worked out by the sheet against TODAY(), so it's right every day, not
+# just on the day of a sync. Closes holds an ISO date (2026-11-20).
+def closing_soon_formula(closes_index: int) -> str:
+    closes = gspread.utils.rowcol_to_a1(2, closes_index + 1).rstrip("0123456789")
+    cell = f"${closes}2"
+    return f'=AND({cell}<>"", DATEVALUE({cell})>=TODAY(), DATEVALUE({cell})<=TODAY()+{CLOSING_SOON_DAYS})'
+
+
+def _closing_soon(
+    sheet_id: int, columns: list[SheetColumn], closes_index: int, row_count: int
+) -> list[dict[str, Any]]:
+    return [
+        {
+            "addConditionalFormatRule": {
+                "rule": {
+                    "ranges": [_range(sheet_id, 1, row_count, index, index + 1)],
+                    "booleanRule": {
+                        "condition": {
+                            "type": "CUSTOM_FORMULA",
+                            "values": [{"userEnteredValue": closing_soon_formula(closes_index)}],
+                        },
+                        "format": CLOSING_SOON_FORMAT,
+                    },
+                },
+                "index": 0,
+            }
+        }
+        for index, column in enumerate(columns)
+        if column.marks_closing_soon
     ]
 
 
 # a dropdown of the column's values; other wording is still allowed (the
 # user's Status), it's only flagged
-def _dropdown(sheet_id: int, column: int, row_count: int, choices: dict[str, str]) -> dict[str, Any]:
+def _dropdown(
+    sheet_id: int, column: int, row_count: int, choices: Mapping[str, str | None]
+) -> dict[str, Any]:
     return {
         "setDataValidation": {
             "range": _range(sheet_id, 1, row_count, column, column + 1),

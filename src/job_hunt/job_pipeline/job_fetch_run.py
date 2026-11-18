@@ -66,14 +66,20 @@ class JobFetchRun:
     def _fetch_from(self, source: JobSource) -> SourceFetchReport:
         logger.info("%s: fetching", source.name)
         try:
-            fetched_jobs = source.fetch_jobs()
+            batches = source.fetch_job_batches()
         # the run's outer boundary: whatever broke inside a source is logged
         # with its traceback and reported, and the next source still runs
         except Exception as error:
             logger.exception("%s: failed", source.name)
             return SourceFetchReport(source_name=source.name, error=str(error) or type(error).__name__)
 
-        save_summary = self._job_repository.save_fetched_jobs(fetched_jobs)
+        # oldest batch first, so each job ends up last seen in the newest one
+        new_jobs = 0
+        for seen_at, batch in batches:
+            new_jobs += self._job_repository.save_fetched_jobs(batch, seen_at).new_jobs
+        fetched_jobs = list(
+            {(job.source, job.source_job_id): job for _, batch in batches for job in batch}.values()
+        )
         # an ATS source's links point at boards that are already tracked
         companies_added = (
             0 if source.reads_tracked_companies else self._add_linked_companies(source.name, fetched_jobs)
@@ -81,8 +87,8 @@ class JobFetchRun:
         report = SourceFetchReport(
             source_name=source.name,
             fetched_jobs=len(fetched_jobs),
-            new_jobs=save_summary.new_jobs,
-            already_known_jobs=save_summary.already_known_jobs,
+            new_jobs=new_jobs,
+            already_known_jobs=len(fetched_jobs) - new_jobs,
             companies_added=companies_added,
         )
         logger.info(

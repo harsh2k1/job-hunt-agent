@@ -2,8 +2,8 @@ from collections.abc import Collection, Iterable
 from datetime import datetime
 
 from pydantic import BaseModel
-from sqlalchemy import func, tuple_
-from sqlmodel import Session, select
+from sqlalchemy import and_, func, or_, tuple_
+from sqlmodel import Session, col, select
 
 from job_hunt.common.database import Database, get_database
 from job_hunt.job_store.models import FetchedJob, StoredJob, utc_now
@@ -63,11 +63,30 @@ class JobRepository:
             )
             return list(session.exec(statement).all())
 
-    # still being advertised: a source saw it on a recent run
-    def list_jobs_seen_since(self, since: datetime) -> list[StoredJob]:
+    # Still being advertised: a source saw it on a recent run. A source that
+    # only sees part of a site (listed_since: source -> from when its unseen
+    # jobs stay listed) keeps its jobs until their deadline, or from then.
+    def list_jobs_seen_since(
+        self, since: datetime, listed_since: dict[str, datetime] | None = None, now: datetime | None = None
+    ) -> list[StoredJob]:
+        now = now or utc_now()
+        conditions = [col(StoredJob.last_seen_at) >= since]
+        for source, source_since in (listed_since or {}).items():
+            no_deadline_yet_listed = and_(
+                col(StoredJob.closes_at).is_(None), col(StoredJob.last_seen_at) >= source_since
+            )
+            conditions.append(
+                and_(
+                    col(StoredJob.source) == source,
+                    or_(col(StoredJob.closes_at) >= now, no_deadline_yet_listed),
+                )
+            )
         with self._database.session_scope() as session:
-            statement = select(StoredJob).where(StoredJob.last_seen_at >= since)
-            return list(session.exec(statement).all())
+            return list(session.exec(select(StoredJob).where(or_(*conditions))).all())
+
+    def list_jobs_from(self, source: str) -> list[StoredJob]:
+        with self._database.session_scope() as session:
+            return list(session.exec(select(StoredJob).where(col(StoredJob.source) == source)).all())
 
     def count_jobs_by_source(self) -> dict[str, int]:
         with self._database.session_scope() as session:

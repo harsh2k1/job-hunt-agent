@@ -29,6 +29,7 @@ class JobsAcUkSource(AdvertPageSource):
     """
 
     name = "jobs_ac_uk"
+    display_name = "jobs.ac.uk"
     _source_settings: JobsAcUkSourceSettings
 
     def _list_advert_links(self) -> list[AdvertPageLink]:
