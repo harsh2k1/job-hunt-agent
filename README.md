@@ -97,7 +97,7 @@ job-hunt schedule status                         # times, slots run, whether che
 job-hunt schedule off                            # stop
 ```
 
-The system's own scheduler starts `job-hunt schedule check` every 5 minutes:
+The system's own scheduler starts `job-hunt schedule check` at each run time, and every 5 minutes as a backup:
 launchd on macOS (through `~/Applications/JobHuntScheduler.app`, so macOS
 can let it read ~/Documents; allow it once when asked), a systemd user timer
 on Linux (`loginctl enable-linger` to run while logged out), Task Scheduler

@@ -5,9 +5,10 @@ Why the app: a background job launched by launchd can't read ~/Documents
 that to an app. The app runs one line, the check command; macOS asks once
 ("JobHuntScheduler would like to access your Documents folder").
 
-Why a periodic check rather than launchd's calendar timer: the calendar
-timer proved unreliable on this Mac. A check that falls due while the Mac
-sleeps runs when it wakes, which is what --run-on-wake builds on.
+Each run time has its own calendar trigger, so a run starts on time; a
+check every few minutes backs it up, since launchd's calendar timer proved
+unreliable on this Mac. A check that falls due while the Mac sleeps runs
+when it wakes, which is what --run-on-wake builds on.
 """
 
 import os
@@ -17,6 +18,7 @@ import shutil
 import subprocess
 from collections.abc import Iterator
 from contextlib import contextmanager
+from datetime import time
 from pathlib import Path
 
 from job_hunt.scheduling.schedule_backend import (
@@ -34,11 +36,16 @@ def app_source(check_command: list[str]) -> str:
     return f"do shell script {applescript_string(shell)}\n"
 
 
-def launch_agent_plist(label: str, app_path: Path, interval_minutes: int, log_dir: Path) -> bytes:
+def launch_agent_plist(
+    label: str, app_path: Path, interval_minutes: int, log_dir: Path, times: tuple[time, ...]
+) -> bytes:
     return plistlib.dumps(
         {
             "Label": label,
             "ProgramArguments": [str(app_path / "Contents" / "MacOS" / "applet")],
+            # a check at each run time, so a run starts on time ...
+            "StartCalendarInterval": [{"Hour": moment.hour, "Minute": moment.minute} for moment in times],
+            # ... and every few minutes, in case a timed start doesn't fire
             "StartInterval": interval_minutes * 60,
             # a check at load and at login too: a slot missed while off can run then
             "RunAtLoad": True,
@@ -68,7 +75,7 @@ class LaunchdBackend(ScheduleBackend):
     def _service(self) -> str:
         return f"gui/{os.getuid()}/{self._label}"
 
-    def install(self, check_command: list[str]) -> list[str]:
+    def install(self, check_command: list[str], times: tuple[time, ...]) -> list[str]:
         self._settings.log_dir.mkdir(parents=True, exist_ok=True)
         notes = self._build_app(check_command)
         LAUNCH_AGENTS_DIR.mkdir(parents=True, exist_ok=True)
@@ -78,6 +85,7 @@ class LaunchdBackend(ScheduleBackend):
                 self._settings.launchd.app_path,
                 self._settings.check_interval_minutes,
                 self._settings.log_dir,
+                times,
             )
         )
         # reloaded, so a changed interval or app takes effect; not loaded yet is fine

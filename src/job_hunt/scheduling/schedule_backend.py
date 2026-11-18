@@ -1,5 +1,5 @@
-"""What the operating system does for the scheduler: start a check every few
-minutes, keep the computer from sleeping during a run, and show a
+"""What the operating system does for the scheduler: start a check at each
+run time and every few minutes, keep the computer from sleeping during a run, and show a
 notification. It never wakes the computer. One backend per system
 (launchd, systemd, Task Scheduler); `auto` picks this system's."""
 
@@ -8,6 +8,7 @@ import subprocess
 import sys
 from abc import ABC, abstractmethod
 from contextlib import AbstractContextManager
+from datetime import time
 from typing import ClassVar
 
 from job_hunt.common.registry import Registry
@@ -30,10 +31,11 @@ class ScheduleBackend(ABC):
         self._settings = settings
         self._store = store
 
-    # start check_command every check_interval_minutes (and at login);
-    # returns notes for the user
+    # start check_command at each run time, and every check_interval_minutes
+    # (and at login) as a backup in case a timed start is missed; returns
+    # notes for the user
     @abstractmethod
-    def install(self, check_command: list[str]) -> list[str]: ...
+    def install(self, check_command: list[str], times: tuple[time, ...]) -> list[str]: ...
 
     @abstractmethod
     def uninstall(self) -> None: ...

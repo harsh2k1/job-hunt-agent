@@ -140,7 +140,7 @@ class FakeBackend(ScheduleBackend):
         self.notes: list[str] = []
         self.awake = False
 
-    def install(self, check_command):
+    def install(self, check_command, times):
         return []
 
     def uninstall(self):
@@ -285,14 +285,21 @@ def test_macos_the_app_runs_the_check_with_quoted_paths():
 
 
 def test_macos_the_launch_agent_checks_every_interval_and_at_login():
-    plist = plistlib.loads(launch_agent_plist("com.jobhunt.test", Path("/Apps/Sched.app"), 5, Path("/logs")))
+    plist = plistlib.loads(
+        launch_agent_plist(
+            "com.jobhunt.test", Path("/Apps/Sched.app"), 5, Path("/logs"), (time(4), time(21, 30))
+        )
+    )
     assert plist["ProgramArguments"] == ["/Apps/Sched.app/Contents/MacOS/applet"]
+    # on time at each run time, and every 5 minutes as a backup
+    assert plist["StartCalendarInterval"] == [{"Hour": 4, "Minute": 0}, {"Hour": 21, "Minute": 30}]
     assert (plist["StartInterval"], plist["RunAtLoad"]) == (300, True)
 
 
 def test_linux_the_timer_checks_every_interval_catches_up_after_suspend_and_never_wakes():
-    timer = timer_unit(5)
-    assert "OnCalendar=*:0/5\n" in timer and "Persistent=true\n" in timer
+    timer = timer_unit(5, (time(4), time(21, 30)))
+    assert "OnCalendar=*-*-* 04:00:00\nOnCalendar=*-*-* 21:30:00\nOnCalendar=*:0/5\n" in timer
+    assert "Persistent=true\n" in timer
     assert "WakeSystem" not in timer
     service = service_unit(
         ["/home/me/my venv/bin/python", "-m", "job_hunt", "schedule", "check"], Path("/logs")
@@ -307,9 +314,12 @@ def test_linux_a_percent_or_quote_in_a_command_is_kept_literal():
 
 def test_windows_the_task_repeats_runs_after_a_missed_start_and_never_wakes_the_pc():
     # read as Task Scheduler reads it: UTF-16
-    xml = task_xml([r"C:\Users\me\venv\Scripts\pythonw.exe", "-m", "job_hunt", "schedule", "check"], 5)
+    xml = task_xml(
+        [r"C:\Users\me\venv\Scripts\pythonw.exe", "-m", "job_hunt", "schedule", "check"], 5, (time(4),)
+    )
     root = ElementTree.fromstring(xml.encode("utf-16"))
     assert root.findtext(".//t:Repetition/t:Interval", namespaces=TASK_NS) == "PT5M"
+    assert root.findtext(".//t:CalendarTrigger/t:StartBoundary", namespaces=TASK_NS) == "2026-01-01T04:00:00"
     assert root.find(".//t:LogonTrigger", TASK_NS) is not None
     assert root.findtext(".//t:StartWhenAvailable", namespaces=TASK_NS) == "true"
     assert root.findtext(".//t:WakeToRun", namespaces=TASK_NS) == "false"
@@ -338,24 +348,27 @@ def test_a_run_is_recorded_as_running_then_with_its_outcome(tmp_path):
     )
 
 
-def test_status_says_a_run_is_going_or_how_the_last_one_ended():
+def test_status_says_a_run_is_going_or_how_the_last_one_ended_with_the_command_for_its_log(tmp_path):
     from job_hunt.cli.schedule_commands import _last_run_line
 
+    log = tmp_path / "2026-11-18.log"
     running = {"slots": "2026-11-18 04:00", "started": "2026-11-18T04:04:05", "finished": None,
                "outcome": "running", "summary": ""}  # fmt: skip
-    assert (
-        _last_run_line(running, running=True)
-        == "Running now: started 2026-11-18 04:04 for slot 2026-11-18 04:00"
+    assert _last_run_line(running, True, tmp_path) == (
+        f"Running now: started 2026-11-18 04:04 for slot 2026-11-18 04:00. Follow it: tail -f {log}"
     )
-    # started by an older version that kept no record: the lock still tells
-    assert _last_run_line(None, running=True).startswith("Running now")
-    assert "stopped without finishing" in _last_run_line(running, running=False)
+    # started by an older version that kept no record: the lock tells, and the newest log is the one
+    (tmp_path / "2026-11-17.log").write_text("")
+    log.write_text("")
+    assert _last_run_line(None, True, tmp_path) == f"Running now. Follow it: tail -f {log}"
+    assert "stopped without finishing" in _last_run_line(running, False, tmp_path)
     done = {
         **running,
         "finished": "2026-11-18T04:41:00",
         "outcome": "ok",
         "summary": "23 new jobs; every step ok",
     }
-    assert _last_run_line(done, running=False) == (
-        "Last run: ok, 2026-11-18 04:04-04:41 (slot 2026-11-18 04:00): 23 new jobs; every step ok"
+    assert _last_run_line(done, False, tmp_path) == (
+        "Last run: ok, 2026-11-18 04:04-04:41 (slot 2026-11-18 04:00): 23 new jobs; every step ok. "
+        f"Log: tail -n 50 {log}"
     )

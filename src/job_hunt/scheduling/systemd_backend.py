@@ -12,6 +12,7 @@ import shutil
 import subprocess
 from collections.abc import Iterator
 from contextlib import contextmanager
+from datetime import time
 from pathlib import Path
 
 from job_hunt.scheduling.schedule_backend import (
@@ -44,11 +45,13 @@ def service_unit(check_command: list[str], log_dir: Path) -> str:
     )
 
 
-def timer_unit(interval_minutes: int) -> str:
+def timer_unit(interval_minutes: int, times: tuple[time, ...]) -> str:
+    at_run_times = "".join(f"OnCalendar=*-*-* {moment:%H:%M}:00\n" for moment in times)
     return (
         "[Unit]\n"
-        "Description=job-hunt: look for a due slot every few minutes\n\n"
+        "Description=job-hunt: look for a due slot at each run time and every few minutes\n\n"
         "[Timer]\n"
+        f"{at_run_times}"
         f"OnCalendar=*:0/{interval_minutes}\n"
         "# a check missed while suspended or off runs as soon as the machine is back\n"
         "Persistent=true\n"
@@ -66,13 +69,15 @@ class SystemdBackend(ScheduleBackend):
     def _unit(self) -> str:
         return self._settings.systemd.unit_name
 
-    def install(self, check_command: list[str]) -> list[str]:
+    def install(self, check_command: list[str], times: tuple[time, ...]) -> list[str]:
         self._settings.log_dir.mkdir(parents=True, exist_ok=True)
         USER_UNIT_DIR.mkdir(parents=True, exist_ok=True)
         (USER_UNIT_DIR / f"{self._unit}.service").write_text(
             service_unit(check_command, self._settings.log_dir)
         )
-        (USER_UNIT_DIR / f"{self._unit}.timer").write_text(timer_unit(self._settings.check_interval_minutes))
+        (USER_UNIT_DIR / f"{self._unit}.timer").write_text(
+            timer_unit(self._settings.check_interval_minutes, times)
+        )
         run_system_command(["systemctl", "--user", "daemon-reload"])
         run_system_command(["systemctl", "--user", "enable", "--now", f"{self._unit}.timer"])
         linger = run_system_command(["loginctl", "show-user", getpass.getuser(), "-p", "Linger"], check=False)

@@ -13,6 +13,9 @@ class MetaCareersSource(SitemapAdvertPageSource):
     display_name = "Meta Careers"
     listing_rank = 20
     sitemap_url = "https://www.metacareers.com/jobsearch/sitemap.xml"
+    # every entry carries the day the sitemap was made (checked 2026-11-18:
+    # all 1,352 dated that day), so it can't tell which adverts changed
+    sitemap_dates_are_per_advert = False
 
     def _is_advert_url(self, url: str) -> bool:
         return "/job_details/" in url

@@ -1,6 +1,8 @@
 import base64
 import os
+import sys
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from email.utils import parseaddr
@@ -46,7 +48,15 @@ class GmailMailbox(Mailbox):
     why this is OAuth and not the sheet sync's key.
     """
 
-    def __init__(self, client_secret_path: Path, token_path: Path, consent_timeout_seconds: int):
+    def __init__(
+        self,
+        client_secret_path: Path,
+        token_path: Path,
+        consent_timeout_seconds: int,
+        # whether someone is there to approve: a terminal, not a scheduled run
+        someone_is_there: Callable[[], bool] = sys.stdin.isatty,
+    ):
+        self._someone_is_there = someone_is_there
         self._client_secret_path = client_secret_path
         self._token_path = token_path
         self._consent_timeout_seconds = consent_timeout_seconds
@@ -88,8 +98,8 @@ class GmailMailbox(Mailbox):
 
     # The saved token is refreshed on its own. When Google has expired it
     # (every 7 days while the OAuth app is in Testing), the consent page
-    # opens again; if nobody approves in time the run fails with a clear
-    # message instead of waiting forever.
+    # opens again when run from a terminal; a scheduled run, with nobody to
+    # approve, fails at once saying how to sign in again.
     def _credentials(self) -> Any:
         from google.auth.exceptions import RefreshError
         from google.auth.transport.requests import Request
@@ -107,6 +117,11 @@ class GmailMailbox(Mailbox):
                 logger.info("the saved Gmail token has expired; asking for consent again")
                 credentials = None
         if credentials is None or not credentials.valid:
+            if not self._someone_is_there():
+                raise MailboxError(
+                    "the Gmail sign-in has expired; run `job-hunt fetch --source email_alerts` in "
+                    "Terminal to sign in again"
+                )
             credentials = self._ask_for_consent()
         self._save_token(credentials.to_json())
         return credentials

@@ -100,7 +100,10 @@ class WorkdaySource(AtsBoardSource):
         return in_target_places or links
 
     def _names_target_place(self, link: AdvertPageLink) -> bool:
-        return self._location_matcher.matches(job_place_segment(link.url).replace("-", " "))
+        place = job_place_segment(link.url)
+        return self._location_matcher.matches(place.replace("-", " ")) or bool(
+            UK_PLACE_CODES & set(place.upper().split("-"))
+        )
 
     def _posting_locations(self, posting: dict[str, Any]) -> list[str | None]:
         return list(read_locations(posting["advert_page"].job_posting))
@@ -131,6 +134,10 @@ class WorkdaySource(AtsBoardSource):
             page,
             company_name=raw_posting.company.name,
         )
+
+
+# country codes Workday sites put in job addresses: /job/Stevenage-GBR/...
+UK_PLACE_CODES = frozenset({"GBR", "GB"})
 
 
 # ".../Depop_Careers/job/London-UK/Backend-Engineer_JR6055" -> "London-UK"

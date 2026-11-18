@@ -228,19 +228,21 @@ default:
       max_page_downloads_per_run: 500
       search_cache_ttl_hours: 20
     meta_careers:
-      # Meta's jobs sitemap, ~1,350 jobs worldwide; its dates are per job,
-      # so after the first runs only changed jobs are downloaded
+      # Meta's jobs sitemap, ~1,350 jobs worldwide; its dates all say the
+      # day it was made, so adverts are kept for 30 days and only new jobs
+      # are downloaded
       enabled: true
       page_cache_ttl_hours: 720
       max_page_downloads_per_run: 1500
     student_circus:
       # visa-sponsoring employers. Public advert pages, no login (only the
-      # description is behind one). About 6,400 adverts: the first runs take
-      # 1,500 a run (about 25 minutes), after that only new ones. Its
-      # sitemap dates are all the same, so adverts are kept for 30 days.
+      # description is behind one). About 6,400 adverts at ~4 s a page: the
+      # first runs take 400 a run (about 27 minutes), after that only new
+      # ones. Its sitemap dates are all the same, so adverts are kept for
+      # 30 days.
       enabled: true
       page_cache_ttl_hours: 720
-      max_page_downloads_per_run: 1500
+      max_page_downloads_per_run: 400
 
     # Job alert emails in Gmail (read only): the saved searches on LinkedIn
     # and Indeed, and the portals that can't be read directly (Gradcracker,
@@ -396,7 +398,8 @@ default:
     # ATS); after that only boards new to the crawl.
     common_crawl:
       crawls_to_read: 3
-      max_board_checks_per_run: 1000
+      # about a second each: 400 keeps discovery to a few minutes a run
+      max_board_checks_per_run: 400
       board_recheck_after_hours: 720
       board_list_cache_ttl_hours: 2160
 
@@ -701,6 +704,7 @@ default:
     backend: auto
     state_dir: "@format {this.REPO_ROOT}/data/schedule"
     log_dir: "@format {this.REPO_ROOT}/logs/scheduled"
+    # a backup check; each run time also gets its own exact trigger
     check_interval_minutes: 5
     # without catch-up, a slot still runs if the check finds it this late
     on_time_grace_minutes: 15

@@ -15,7 +15,13 @@ from job_hunt.common.settings import settings
 from job_hunt.job_sources.email_alerts.alert_parsers import parse_alert_email, read_indeed_subject
 from job_hunt.job_sources.email_alerts.email_alert_source import EmailAlertSource
 from job_hunt.job_sources.email_alerts.job_links import UNTITLED_ADVERT, find_job_links, unwrap_tracking_link
-from job_hunt.job_sources.email_alerts.mailbox import AlertEmail, GmailMailbox, Mailbox, read_gmail_message
+from job_hunt.job_sources.email_alerts.mailbox import (
+    AlertEmail,
+    GmailMailbox,
+    Mailbox,
+    MailboxError,
+    read_gmail_message,
+)
 
 RECEIVED = datetime(2026, 11, 10, 9, 0, tzinfo=timezone.utc)
 
@@ -281,7 +287,15 @@ def test_expired_token_asks_for_consent_again_and_saves_the_new_one(tmp_path, mo
     monkeypatch.setattr(InstalledAppFlow, "from_client_secrets_file", lambda *args: consent)
     monkeypatch.setattr(googleapiclient.discovery, "build", lambda *args, **kwargs: FakeGmailService())
 
-    mailbox = GmailMailbox(client_secret_path, token_path, consent_timeout_seconds=300)
+    # a scheduled run, nobody at the screen: no consent page, a clear message at once
+    unattended = GmailMailbox(client_secret_path, token_path, 300, someone_is_there=lambda: False)
+    with pytest.raises(MailboxError, match="run `job-hunt fetch --source email_alerts` in Terminal"):
+        unattended.find_messages("newer_than:7d", 10)
+    assert consent.timeouts == []
+
+    mailbox = GmailMailbox(
+        client_secret_path, token_path, consent_timeout_seconds=300, someone_is_there=lambda: True
+    )
     assert mailbox.find_messages("newer_than:7d", 10) == ["m1"]
     assert consent.timeouts == [300]
     assert '"token": "new"' in token_path.read_text()

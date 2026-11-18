@@ -590,3 +590,32 @@ def test_workday_site_naming_only_towns_has_every_job_read(database, cache):
         cache,
     )
     assert sorted(job.title for job in source.fetch_jobs()) == ["Analyst", "Data Scientist"]
+
+
+def test_workday_site_naming_country_codes_reads_only_its_uk_jobs(database, cache):
+    # Viavi's addresses: /job/Stevenage-GBR/... and /job/Santa-Rosa-CA-USA/...; neither town is a
+    # target place, but GBR is the UK, so the US job is never downloaded
+    codes_sitemap = WORKDAY_SITEMAP.replace("/job/London/", "/job/Stevenage-GBR/").replace(
+        "/job/Dublin/", "/job/Santa-Rosa-CA-USA/"
+    )
+    routes = {
+        ("jlp.wd3.myworkdayjobs.com", "/jlpjobs_careers/siteMap.xml"): codes_sitemap,
+        (
+            "jlp.wd3.myworkdayjobs.com",
+            "/JLPjobs_careers/job/Stevenage-GBR/Data-Scientist_R-1",
+        ): workday_job_page("Data Scientist", "R-1", "Stevenage", "United Kingdom"),
+    }
+    track(database, AtsPlatform.WORKDAY, "jlp.wd3/jlpjobs_careers", "Viavi")
+    seen: list[httpx.Request] = []
+    source = WorkdaySource(
+        settings.job_sources.workday,
+        TargetLocationMatcher(["london", "uk", "united kingdom"]),
+        make_http_client(routes, seen),
+        CompanyRepository(database),
+        cache,
+    )
+    [job] = source.fetch_jobs()
+    assert job.title == "Data Scientist"
+    assert [request.url.path for request in seen if "/job/" in request.url.path] == [
+        "/JLPjobs_careers/job/Stevenage-GBR/Data-Scientist_R-1"
+    ]

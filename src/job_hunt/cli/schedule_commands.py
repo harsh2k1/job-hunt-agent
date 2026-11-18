@@ -109,12 +109,12 @@ class ScheduleCommand(CliCommand):
         )
         store.save_spec(spec)
         store.save_run_path(_run_path())
-        notes = backend.install(CHECK_COMMAND)
+        notes = backend.install(CHECK_COMMAND, spec.times)
         print(f"Scheduled: job-hunt run, {spec.describe()}.")
         print(_sleep_rules(spec))
         for note in notes:
             print(note)
-        print(f"Logs: {settings.scheduling.log_dir}/<date>.log. See it with `job-hunt schedule status`.")
+        print("Check on it with `job-hunt schedule status`.")
         return EXIT_SUCCESS
 
     def _off(self, store: ScheduleStore, backend: ScheduleBackend) -> int:
@@ -138,10 +138,11 @@ class ScheduleCommand(CliCommand):
                     "Due now (runs at the next check): "
                     + ", ".join(f"{slot:%Y-%m-%d %H:%M}" for slot in missed)
                 )
-            print(_last_run_line(store.load_last_run(), _checker(store, backend).run_in_progress()))
+            last_run = store.load_last_run()
+            running = _checker(store, backend).run_in_progress()
+            print(_last_run_line(last_run, running, settings.scheduling.log_dir))
         for line in backend.describe():
             print(line)
-        print(f"Logs: {settings.scheduling.log_dir}")
         return EXIT_SUCCESS
 
 
@@ -149,27 +150,40 @@ def _checker(store: ScheduleStore, backend: ScheduleBackend) -> ScheduledCheck:
     return ScheduledCheck(settings.scheduling, store, backend, RUN_COMMAND)
 
 
-# what the latest run did, or that one is going now (a run holds the lock)
-def _last_run_line(last_run: dict | None, running: bool) -> str:
+# What the latest run did, or that one is going now (a run holds the lock),
+# with the command that shows its log.
+def _last_run_line(last_run: dict | None, running: bool, log_dir: Path) -> str:
+    started = datetime.fromisoformat(last_run["started"]) if last_run else None
     unfinished = last_run is not None and last_run["finished"] is None
+    log = _run_log(log_dir, started if unfinished or not running else None)
     if running:
-        if unfinished and last_run is not None:
-            started = datetime.fromisoformat(last_run["started"])
-            return f"Running now: started {started:%Y-%m-%d %H:%M} for slot {last_run['slots']}"
-        return "Running now (see the log for progress)"
-    if last_run is None:
+        if started is not None and unfinished and last_run is not None:
+            return (
+                f"Running now: started {started:%Y-%m-%d %H:%M} for slot {last_run['slots']}. "
+                f"Follow it: tail -f {log}"
+            )
+        return f"Running now. Follow it: tail -f {log}"
+    if last_run is None or started is None:
         return "Last run: none yet"
-    started = datetime.fromisoformat(last_run["started"])
     if unfinished:
         return (
             f"Last run: started {started:%Y-%m-%d %H:%M} for slot {last_run['slots']} and stopped "
-            "without finishing (the check was killed or the computer shut down); see the log"
+            f"without finishing (the check was killed or the computer shut down). See: tail -n 50 {log}"
         )
     finished = datetime.fromisoformat(last_run["finished"])
     return (
         f"Last run: {last_run['outcome']}, {started:%Y-%m-%d %H:%M}-{finished:%H:%M} "
-        f"(slot {last_run['slots']}): {last_run['summary']}"
+        f"(slot {last_run['slots']}): {last_run['summary']}. Log: tail -n 50 {log}"
     )
+
+
+# A run writes to the log of the day it started; with no record of when,
+# the newest day's log.
+def _run_log(log_dir: Path, started: datetime | None) -> Path:
+    if started is not None:
+        return log_dir / f"{started:%Y-%m-%d}.log"
+    days = sorted(log_dir.glob("20??-??-??.log"))
+    return days[-1] if days else log_dir / f"{datetime.now():%Y-%m-%d}.log"
 
 
 def _grace() -> timedelta:
@@ -177,8 +191,10 @@ def _grace() -> timedelta:
 
 
 def _sleep_rules(spec: ScheduleSpec) -> str:
-    missed = "happens as soon as it's back" if spec.catch_up else "is skipped (--run-on-wake to run it)"
-    return f"  A run missed while the computer slept or was off {missed}. The computer is never woken."
+    missed = (
+        "it runs once it's back" if spec.catch_up else "that run is skipped (--run-on-wake to run it later)"
+    )
+    return f"  If the computer is asleep or off at a run time, {missed}. The computer is never woken."
 
 
 # what the run's PATH starts with: this Python's folder (job-hunt), the

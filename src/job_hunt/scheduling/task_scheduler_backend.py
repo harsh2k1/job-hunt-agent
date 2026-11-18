@@ -11,6 +11,7 @@ import ctypes
 import subprocess
 from collections.abc import Iterator
 from contextlib import contextmanager
+from datetime import time
 from pathlib import Path
 from xml.sax.saxutils import escape
 
@@ -37,8 +38,20 @@ def windowless(check_command: list[str]) -> list[str]:
     ]
 
 
-def task_xml(check_command: list[str], interval_minutes: int) -> str:
+def task_xml(check_command: list[str], interval_minutes: int, times: tuple[time, ...]) -> str:
     command, *arguments = check_command
+    # a daily trigger at each run time, besides the every-few-minutes one
+    at_run_times = "".join(
+        f"""    <CalendarTrigger>
+      <StartBoundary>2026-01-01T{moment:%H:%M}:00</StartBoundary>
+      <ScheduleByDay>
+        <DaysInterval>1</DaysInterval>
+      </ScheduleByDay>
+      <Enabled>true</Enabled>
+    </CalendarTrigger>
+"""
+        for moment in times
+    )
     return f"""<?xml version="1.0" encoding="UTF-16"?>
 <Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
   <RegistrationInfo>
@@ -48,7 +61,7 @@ def task_xml(check_command: list[str], interval_minutes: int) -> str:
     <LogonTrigger>
       <Enabled>true</Enabled>
     </LogonTrigger>
-    <TimeTrigger>
+{at_run_times}    <TimeTrigger>
       <StartBoundary>2026-01-01T00:00:00</StartBoundary>
       <Repetition>
         <Interval>PT{interval_minutes}M</Interval>
@@ -98,13 +111,13 @@ class TaskSchedulerBackend(ScheduleBackend):
     def _task(self) -> str:
         return f"{self._settings.task_scheduler.folder}\\Check"
 
-    def install(self, check_command: list[str]) -> list[str]:
+    def install(self, check_command: list[str], times: tuple[time, ...]) -> list[str]:
         self._settings.log_dir.mkdir(parents=True, exist_ok=True)
         self._store.state_dir.mkdir(parents=True, exist_ok=True)
         task_path = self._store.state_dir / TASK_FILE
         # Task Scheduler reads task files as UTF-16
         task_path.write_text(
-            task_xml(windowless(check_command), self._settings.check_interval_minutes), "utf-16"
+            task_xml(windowless(check_command), self._settings.check_interval_minutes, times), "utf-16"
         )
         run_system_command(["schtasks", "/Create", "/TN", self._task, "/XML", str(task_path), "/F"])
         return []
