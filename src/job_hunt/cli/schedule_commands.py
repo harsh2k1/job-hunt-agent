@@ -91,7 +91,7 @@ class ScheduleCommand(CliCommand):
         except ScheduleBackendError as error:
             print(f"Couldn't set up the schedule: {error}")
             return EXIT_FAILURE
-        outcome = ScheduledCheck(settings.scheduling, store, backend, RUN_COMMAND).check()
+        outcome = _checker(store, backend).check()
         return EXIT_FAILURE if outcome is CheckOutcome.FAILED else EXIT_SUCCESS
 
     def _set(self, args: argparse.Namespace, store: ScheduleStore, backend: ScheduleBackend) -> int:
@@ -138,12 +138,38 @@ class ScheduleCommand(CliCommand):
                     "Due now (runs at the next check): "
                     + ", ".join(f"{slot:%Y-%m-%d %H:%M}" for slot in missed)
                 )
-            recent = sorted(history.claimed)[-5:]
-            print("Recent slots run: " + (", ".join(recent) if recent else "none yet"))
+            print(_last_run_line(store.load_last_run(), _checker(store, backend).run_in_progress()))
         for line in backend.describe():
             print(line)
         print(f"Logs: {settings.scheduling.log_dir}")
         return EXIT_SUCCESS
+
+
+def _checker(store: ScheduleStore, backend: ScheduleBackend) -> ScheduledCheck:
+    return ScheduledCheck(settings.scheduling, store, backend, RUN_COMMAND)
+
+
+# what the latest run did, or that one is going now (a run holds the lock)
+def _last_run_line(last_run: dict | None, running: bool) -> str:
+    unfinished = last_run is not None and last_run["finished"] is None
+    if running:
+        if unfinished and last_run is not None:
+            started = datetime.fromisoformat(last_run["started"])
+            return f"Running now: started {started:%Y-%m-%d %H:%M} for slot {last_run['slots']}"
+        return "Running now (see the log for progress)"
+    if last_run is None:
+        return "Last run: none yet"
+    started = datetime.fromisoformat(last_run["started"])
+    if unfinished:
+        return (
+            f"Last run: started {started:%Y-%m-%d %H:%M} for slot {last_run['slots']} and stopped "
+            "without finishing (the check was killed or the computer shut down); see the log"
+        )
+    finished = datetime.fromisoformat(last_run["finished"])
+    return (
+        f"Last run: {last_run['outcome']}, {started:%Y-%m-%d %H:%M}-{finished:%H:%M} "
+        f"(slot {last_run['slots']}): {last_run['summary']}"
+    )
 
 
 def _grace() -> timedelta:

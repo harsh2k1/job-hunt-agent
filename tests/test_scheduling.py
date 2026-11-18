@@ -315,3 +315,47 @@ def test_windows_the_task_repeats_runs_after_a_missed_start_and_never_wakes_the_
     assert root.findtext(".//t:WakeToRun", namespaces=TASK_NS) == "false"
     assert root.findtext(".//t:Exec/t:Command", namespaces=TASK_NS) == r"C:\Users\me\venv\Scripts\pythonw.exe"
     assert root.findtext(".//t:Exec/t:Arguments", namespaces=TASK_NS) == "-m job_hunt schedule check"
+
+
+def test_a_run_is_recorded_as_running_then_with_its_outcome(tmp_path):
+    seen_while_running = []
+
+    class WatchingRun(FakeRun):
+        def __call__(self, command, limit_seconds, log_path, env):
+            seen_while_running.append(store.load_last_run())
+            return super().__call__(command, limit_seconds, log_path, env)
+
+    check, store, _ = make_check(
+        tmp_path, datetime(2026, 11, 18, 4, 4), WatchingRun(), schedule=spec("04:00")
+    )
+    check.check()
+    assert seen_while_running[0]["outcome"] == "running" and seen_while_running[0]["finished"] is None
+    last = store.load_last_run()
+    assert (last["slots"], last["outcome"], last["summary"]) == (
+        "2026-11-18 04:00",
+        "ok",
+        "23 new jobs; every step ok",
+    )
+
+
+def test_status_says_a_run_is_going_or_how_the_last_one_ended():
+    from job_hunt.cli.schedule_commands import _last_run_line
+
+    running = {"slots": "2026-11-18 04:00", "started": "2026-11-18T04:04:05", "finished": None,
+               "outcome": "running", "summary": ""}  # fmt: skip
+    assert (
+        _last_run_line(running, running=True)
+        == "Running now: started 2026-11-18 04:04 for slot 2026-11-18 04:00"
+    )
+    # started by an older version that kept no record: the lock still tells
+    assert _last_run_line(None, running=True).startswith("Running now")
+    assert "stopped without finishing" in _last_run_line(running, running=False)
+    done = {
+        **running,
+        "finished": "2026-11-18T04:41:00",
+        "outcome": "ok",
+        "summary": "23 new jobs; every step ok",
+    }
+    assert _last_run_line(done, running=False) == (
+        "Last run: ok, 2026-11-18 04:04-04:41 (slot 2026-11-18 04:00): 23 new jobs; every step ok"
+    )

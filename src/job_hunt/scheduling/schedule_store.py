@@ -15,6 +15,7 @@ from job_hunt.scheduling.slots import SlotHistory
 SPEC_FILE = "schedule.json"
 HISTORY_FILE = "history.json"
 RUN_PATH_FILE = "run_path.json"
+LAST_RUN_FILE = "last_run.json"
 
 
 class ScheduleStore:
@@ -37,6 +38,13 @@ class ScheduleStore:
 
     def save_history(self, history: SlotHistory) -> None:
         self.write_json(HISTORY_FILE, {"claimed": sorted(history.claimed), "attempts": history.attempts})
+
+    # the latest run: slots, started, finished (None while running), outcome, summary
+    def load_last_run(self) -> dict[str, Any] | None:
+        return self.read_json(LAST_RUN_FILE)
+
+    def save_last_run(self, last_run: dict[str, Any]) -> None:
+        self.write_json(LAST_RUN_FILE, last_run)
 
     # folders put first on the run's PATH
     def load_run_path(self) -> list[str]:

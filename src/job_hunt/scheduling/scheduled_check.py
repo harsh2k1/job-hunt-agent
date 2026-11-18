@@ -175,9 +175,19 @@ class ScheduledCheck:
         self._store.save_history(history)
         slots = ", ".join(slot_id(slot) for slot in due)
         self._log(f"run started for {slots}")
+        last_run = {"slots": slots, "started": self._clock().isoformat(timespec="seconds"), "finished": None}
+        self._store.save_last_run({**last_run, "outcome": "running", "summary": ""})
         limit = self._settings.run_time_limit_minutes * 60
         with self._backend.keep_awake():
             result = self._run(self._run_command, limit, self._log_path(), self._run_environment())
+        self._store.save_last_run(
+            {
+                **last_run,
+                "finished": self._clock().isoformat(timespec="seconds"),
+                "outcome": "ok" if result.succeeded else "failed",
+                "summary": result.summary(),
+            }
+        )
         if result.succeeded:
             self._log(f"run finished: {result.summary()}")
             self._backend.notify("Job hunt", f"Run finished: {result.summary()}")
@@ -189,6 +199,11 @@ class ScheduledCheck:
         self._log(f"run failed (exit {result.exit_code}): {result.summary()}; {retry}")
         self._backend.notify("Job hunt", f"Run failed: {result.summary()}; {retry}. Log: {self._log_path()}")
         return CheckOutcome.FAILED
+
+    # True while a run holds the lock (another process, or this one)
+    def run_in_progress(self) -> bool:
+        with exclusive_lock(self._store.state_dir / LOCK_FILE) as locked:
+            return not locked
 
     def _wait_for_internet(self) -> bool:
         tries = max(1, self._settings.internet_wait_seconds // SECONDS_BETWEEN_CONNECTIVITY_TRIES)
