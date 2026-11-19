@@ -619,3 +619,15 @@ def test_workday_site_naming_country_codes_reads_only_its_uk_jobs(database, cach
     assert [request.url.path for request in seen if "/job/" in request.url.path] == [
         "/JLPjobs_careers/job/Stevenage-GBR/Data-Scientist_R-1"
     ]
+
+
+def test_a_board_answering_with_something_that_isnt_its_feed_is_skipped_and_the_others_still_read(database):
+    track(database, AtsPlatform.TEAMTAILOR, "creditspring", "Creditspring")
+    track(database, AtsPlatform.TEAMTAILOR, "broken", "Broken Ltd")
+    routes = {
+        ("creditspring.teamtailor.com", "/jobs.rss"): TEAMTAILOR_FEED,
+        # an error page where the RSS feed should be
+        ("broken.teamtailor.com", "/jobs.rss"): "<!doctype html><p>Something went wrong",
+    }
+    [job] = make_source(TeamtailorSource, database, routes).fetch_jobs()
+    assert job.title == "Data Scientist"

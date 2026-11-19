@@ -10,6 +10,8 @@ import job_hunt.job_sources.employer_adverts  # noqa: F401  # isort: skip
 import job_hunt.job_sources.job_boards  # noqa: F401  # isort: skip
 import job_hunt.job_sources.portals  # noqa: F401  # isort: skip
 import job_hunt.job_sources.saved_pages  # noqa: F401  # isort: skip
+from job_hunt.job_sources.ats_boards.ats_board_source import AtsBoardSource
+from job_hunt.job_sources.ats_boards.board_schedule import BoardSchedule
 from job_hunt.job_sources.job_source import JobSource, job_source_registry
 
 UNRANKED_LISTING = 99
@@ -18,9 +20,13 @@ UNRANKED_LISTING = 99
 class JobSourceFactory:
     """Builds job sources by name, configured from settings."""
 
+    # company-board sources read only the boards due this run (quiet ones weekly)
     @staticmethod
     def create(source_name: str, settings: Settings = app_settings) -> JobSource:
-        return job_source_registry.get(source_name).from_settings(settings)
+        source = job_source_registry.get(source_name).from_settings(settings)
+        if isinstance(source, AtsBoardSource):
+            source.board_schedule = lambda: BoardSchedule.for_source(settings, source_name)
+        return source
 
     # rank used to pick which source's copy of an advert to show; sources no
     # longer registered (renamed or removed) come last

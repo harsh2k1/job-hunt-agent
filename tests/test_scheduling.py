@@ -207,8 +207,16 @@ def test_the_run_gets_the_path_saved_when_the_schedule_was_set(tmp_path):
     assert run.paths[0].split(os.pathsep)[:2] == ["/venv/bin", "/opt/homebrew/bin"]
 
 
+class SheetFailedRun(FakeRun):
+    """A run that got to the end but couldn't update the sheet."""
+
+    def __call__(self, command, limit_seconds, log_path, env):
+        self.calls += 1
+        return RunResult(1, [StepLine(True, "fetch", "(23 new)"), StepLine(False, "Google Sheet", "quota")])
+
+
 def test_a_failed_run_is_retried_at_the_next_check(tmp_path):
-    run = FakeRun(exit_code=1)
+    run = SheetFailedRun()
     check, store, backend = make_check(tmp_path, datetime(2026, 11, 18, 3, 2), run)
     assert check.check() is CheckOutcome.FAILED
     assert "retrying at the next check" in backend.notes[0]
@@ -254,14 +262,14 @@ def test_step_lines_from_the_daily_run_are_read():
     assert RunResult(1, steps).summary() == "23 new jobs; failed: Google Sheet"
 
 
-def test_a_run_that_outlives_its_wall_clock_limit_is_stopped(tmp_path):
-    # the wall clock jumps an hour, as it does across a sleep, while the run hangs
+def test_a_run_stuck_past_its_awake_time_limit_is_stopped(tmp_path):
+    # the awake clock moves an hour on while the run hangs
     readings = iter([0.0, 3600.0])
     result = run_with_time_limit(
         [sys.executable, "-c", "import time; time.sleep(60)"],
         limit_seconds=1800,
         log_path=tmp_path / "run.log",
-        wall_clock=lambda: next(readings, 3600.0),
+        awake_clock=lambda: next(readings, 3600.0),
         poll_seconds=0.05,
     )
     assert result.exit_code == EXIT_TIMED_OUT
@@ -374,3 +382,33 @@ def test_status_says_a_run_is_going_or_how_the_last_one_ended_with_the_command_f
         "Last run: ok, 2026-11-18 04:04-04:41 (slot 2026-11-18 04:00): 23 new jobs; every step ok. "
         f"Log: tail -n 50 {log}"
     )
+
+
+def test_a_run_stopped_before_it_reported_says_so():
+    assert RunResult(-15, []).summary() == "stopped before it finished (exit -15)"
+    assert RunResult(EXIT_TIMED_OUT, []).summary() == "stopped at the time limit before it finished"
+
+
+def test_a_run_where_only_a_source_failed_is_reported_not_rerun(tmp_path):
+    class SourceFailed(FakeRun):
+        def __call__(self, command, limit_seconds, log_path, env):
+            self.calls += 1
+            steps = [
+                StepLine(False, "fetch", "27 sources (299 new); failed: teamtailor"),
+                StepLine(True, "LLM screening", ""),
+                StepLine(True, "Google Sheet", ""),
+            ]
+            return RunResult(1, steps)
+
+    run = SourceFailed()
+    check, _, backend = make_check(tmp_path, datetime(2026, 11, 18, 3, 2), run)
+    assert check.check() is CheckOutcome.RAN
+    assert check.check() is CheckOutcome.NOTHING_DUE
+    assert run.calls == 1 and backend.notes[0].startswith("Run finished with problems")
+
+
+def test_a_run_whose_sheet_failed_is_rerun():
+    steps = [StepLine(True, "fetch", ""), StepLine(False, "Google Sheet", "quota")]
+    assert RunResult(1, steps).needs_retry
+    assert not RunResult(1, [StepLine(False, "fetch", ""), StepLine(True, "Google Sheet", "")]).needs_retry
+    assert RunResult(-15, []).needs_retry

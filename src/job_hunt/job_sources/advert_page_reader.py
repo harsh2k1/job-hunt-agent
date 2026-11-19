@@ -4,6 +4,7 @@ Each page is downloaded once and only its markup and ATS links are cached."""
 
 import html
 import re
+import time
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -81,13 +82,25 @@ class AdvertPageReader:
     # Pages already in the cache cost nothing; new ones are downloaded up to
     # max_downloads, and the rest wait for a later run, so a first run
     # against a big site can't hold up the daily fetch for hours.
-    def read_pages(self, links: Iterable[AdvertPageLink], max_downloads: int) -> AdvertPageBatch:
+    # A deadline (time.monotonic) or a run of failed downloads in a row
+    # (the site pushing back) also stops downloading for this run; pages
+    # already cached are still read.
+    def read_pages(
+        self,
+        links: Iterable[AdvertPageLink],
+        max_downloads: int,
+        deadline: float | None = None,
+        stop_after_failures: int | None = None,
+    ) -> AdvertPageBatch:
         batch = AdvertPageBatch()
+        failures_in_a_row = 0
         for link in links:
             cache_key = f"{self._cache_namespace}:advert:{link.url}:{link.version}"
             page_fields = self._cache.get(cache_key, default=CACHE_MISS)
             if page_fields is CACHE_MISS:
-                if batch.downloaded >= max_downloads:
+                out_of_time = deadline is not None and time.monotonic() >= deadline
+                pushed_back = stop_after_failures is not None and failures_in_a_row >= stop_after_failures
+                if batch.downloaded >= max_downloads or out_of_time or pushed_back:
                     batch.deferred += 1
                     continue
                 batch.downloaded += 1
@@ -95,8 +108,10 @@ class AdvertPageReader:
                     page_fields = self._download(link.url)
                 except HttpRequestError as error:
                     batch.failed += 1
+                    failures_in_a_row += 1
                     logger.warning("%s: couldn't read %s: %s", self._cache_namespace, link.url, error)
                     continue
+                failures_in_a_row = 0
                 self._cache.set(cache_key, page_fields, ttl_hours=self._page_cache_ttl_hours)
             batch.read += 1
             if page_fields is None:

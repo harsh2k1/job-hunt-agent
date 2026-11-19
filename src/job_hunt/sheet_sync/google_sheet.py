@@ -43,11 +43,15 @@ class SheetCounts:
     skipped: int
     # unrelated or closed: remembered, not shown
     hidden: int
+    # not screened yet: shown once they are (a later run), so To check only
+    # holds roles the screening found could be the candidate's
+    waiting: int = 0
 
     def __str__(self) -> str:
         return (
             f"{self.apply} to apply on Jobs, {self.check} on To check, {self.skipped} on Skipped "
-            f"(related but not open to you); {self.hidden} unrelated or closed, not shown"
+            f"(related but not open to you); {self.hidden} unrelated or closed, not shown; "
+            f"{self.waiting} waiting to be screened"
         )
 
 
@@ -74,8 +78,9 @@ class GoogleSheetSync:
         return cls(settings, JobRepository(), SponsorRepository(), ScreeningRepository())
 
     # Jobs: only roles the candidate can apply to now ("apply"). To check:
-    # what the advert doesn't settle, and anything not screened yet, never
-    # mixed into Jobs. Skipped: everything else, with the reason.
+    # what the advert doesn't settle, never mixed into Jobs. Skipped:
+    # related roles the candidate can't take, with the reason. A listing not
+    # screened yet waits off the sheet until a run screens it.
     def sync(self) -> SheetCounts:
         spreadsheet = self._open_spreadsheet()
         live = live_listings(self._settings, self._job_repository, TitleScreeningRepository(), utc_now())
@@ -96,10 +101,11 @@ class GoogleSheetSync:
         def verdict_of(listing: Listing) -> FinalVerdict:
             return verdicts[listing.key]
 
-        by_verdict: dict[str, list[Listing]] = {"apply": [], "check": [], "skip": [], UNRELATED: []}
+        by_verdict: dict[str, list[Listing]] = {
+            "apply": [], "check": [], "skip": [], UNRELATED: [], NOT_SCREENED: [],
+        }  # fmt: skip
         for listing in live.kept:
-            verdict = verdict_of(listing).verdict
-            by_verdict["check" if verdict == NOT_SCREENED else verdict].append(listing)
+            by_verdict[verdict_of(listing).verdict].append(listing)
         # Skipped holds only related roles the candidate can't take, so wrong
         # skips can be spotted; unrelated and closed listings aren't shown
         skipped = [ScreenedListing(listing, verdict_of(listing).reason) for listing in by_verdict["skip"]]
@@ -139,7 +145,7 @@ class GoogleSheetSync:
             + check_tab(checks_tab, columns)
             + check_tab(skipped_tab, skipped_columns_used)
             + check_verdicts(jobs_tab, {"apply"})
-            + check_verdicts(checks_tab, {"check", NOT_SCREENED})
+            + check_verdicts(checks_tab, {"check"})
             + check_tab_order(spreadsheet, tab_titles)
         )
         if problems:
@@ -149,6 +155,7 @@ class GoogleSheetSync:
             len(by_verdict["check"]),
             len(skipped),
             hidden=len(live.skipped) + len(by_verdict[UNRELATED]),
+            waiting=len(by_verdict[NOT_SCREENED]),
         )
         logger.info("sheet: %s", counts)
         return counts

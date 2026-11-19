@@ -5,9 +5,10 @@ checks find nothing due and end at once; when a slot is due it:
 2. waits for the internet (after a wake Wi-Fi can lag; if it isn't back,
    the slot stays due for the next check);
 3. claims the due slots, then runs `job-hunt run` with the PATH saved when
-   the schedule was set, the computer kept from sleeping, and a wall-clock
-   time limit (a hung call can't hold the lock for
-   days; time asleep counts, unlike Python's own timeouts);
+   the schedule was set, the computer kept from sleeping while it can be
+   (a laptop with its lid shut on battery sleeps anyway), and a limit on
+   the time the computer is awake: a run paused by sleep carries on when it
+   wakes, and only a run stuck while awake is stopped;
 4. gives the slots back for a retry if the run fails, and shows a notification.
 """
 
@@ -39,6 +40,8 @@ SECONDS_BETWEEN_POLLS = 15
 SECONDS_TO_STOP = 30
 # a run that outlives its limit
 EXIT_TIMED_OUT = 142
+# a run whose only failures were elsewhere (a source) isn't rerun
+STEPS_WORTH_A_RETRY = frozenset({"LLM screening", "Google Sheet"})
 # `job-hunt run` prints "ok      <step>  <summary>" or "FAILED  <step>  <summary>"
 _STEP_LINE = re.compile(r"^(ok|FAILED)\s+(.+?)(?:\s{2,}(.*))?$")
 
@@ -77,13 +80,28 @@ class RunResult:
     def succeeded(self) -> bool:
         return self.exit_code == 0
 
+    # Worth running again: the run didn't get to the end (killed, timed out,
+    # crashed), or what the user sees wasn't brought up to date (screening,
+    # the sheet). A source or two failing is reported, not rerun: the next
+    # day's run reads them again anyway.
+    @property
+    def needs_retry(self) -> bool:
+        if self.succeeded:
+            return False
+        if self.exit_code == EXIT_TIMED_OUT or not self.steps:
+            return True
+        return any(not line.ok and line.step in STEPS_WORTH_A_RETRY for line in self.steps)
+
     def summary(self) -> str:
+        if self.exit_code == EXIT_TIMED_OUT:
+            return "stopped at the time limit before it finished"
+        # killed, or crashed, before it printed what each step did
+        if not self.steps:
+            return f"stopped before it finished (exit {self.exit_code})"
         failed = [line.step for line in self.steps if not line.ok]
         fetch = next((line.summary for line in self.steps if line.step == "fetch"), "")
         new_jobs = re.search(r"\((\d+) new\)", fetch)
-        found = f"{new_jobs.group(1)} new jobs" if new_jobs else "no fetch summary"
-        if self.exit_code == EXIT_TIMED_OUT:
-            return f"stopped at the time limit; {found}"
+        found = f"{new_jobs.group(1)} new jobs" if new_jobs else "no new-jobs count"
         return f"{found}; failed: {', '.join(failed)}" if failed else f"{found}; every step ok"
 
 
@@ -95,23 +113,24 @@ def internet_is_up() -> bool:
         return False
 
 
-# Runs command until it ends or limit_seconds of wall-clock time pass
-# (time.time, which counts sleep; subprocess timeouts don't).
+# Runs command until it ends or limit_seconds of awake time pass: the
+# monotonic clock stops while macOS and Linux sleep, so a run paused by a
+# closed lid isn't killed for it (on 2026-11-18 one was, mid-fetch).
 def run_with_time_limit(
     command: list[str],
     limit_seconds: float,
     log_path: Path,
     env: dict[str, str] | None = None,
-    wall_clock: Callable[[], float] = time.time,
+    awake_clock: Callable[[], float] = time.monotonic,
     poll_seconds: float = SECONDS_BETWEEN_POLLS,
 ) -> RunResult:
     start = log_path.stat().st_size if log_path.exists() else 0
     with log_path.open("a") as log:
         process = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT, env=env)
-        deadline = wall_clock() + limit_seconds
+        deadline = awake_clock() + limit_seconds
         exit_code = None
         while (exit_code := process.poll()) is None:
-            if wall_clock() >= deadline:
+            if awake_clock() >= deadline:
                 process.terminate()
                 try:
                     process.wait(SECONDS_TO_STOP)
@@ -191,6 +210,12 @@ class ScheduledCheck:
         if result.succeeded:
             self._log(f"run finished: {result.summary()}")
             self._backend.notify("Job hunt", f"Run finished: {result.summary()}")
+            return CheckOutcome.RAN
+        if not result.needs_retry:
+            self._log(f"run finished with problems: {result.summary()}; not rerun (see the log)")
+            self._backend.notify(
+                "Job hunt", f"Run finished with problems: {result.summary()}. Log: {self._log_path()}"
+            )
             return CheckOutcome.RAN
         history = self._store.load_history()
         released = history.record_failure(due, self._settings.attempts_per_slot)

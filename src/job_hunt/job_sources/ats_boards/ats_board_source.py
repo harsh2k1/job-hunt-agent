@@ -1,8 +1,9 @@
 from abc import abstractmethod
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
-from typing import Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
 from urllib.parse import SplitResult
+from xml.etree import ElementTree
 
 from job_hunt.common.http_client import HttpClient, HttpRequestError, get_http_client
 from job_hunt.common.logger import get_logger
@@ -11,6 +12,9 @@ from job_hunt.job_sources.job_source import JobSource, JobSourceError
 from job_hunt.job_sources.location_matching import TargetLocationMatcher
 from job_hunt.job_store.company_repository import CompanyRepository
 from job_hunt.job_store.models import AtsPlatform, TrackedCompany
+
+if TYPE_CHECKING:
+    from job_hunt.job_sources.ats_boards.board_schedule import BoardSchedule
 
 logger = get_logger(__name__)
 
@@ -79,10 +83,30 @@ class AtsBoardSource(JobSource[BoardPosting]):
     @abstractmethod
     def _posting_locations(self, posting: dict[str, Any]) -> list[str | None]: ...
 
+    # builds the schedule of which boards this run reads (board_schedule.py),
+    # when the fetch starts; None: every board
+    board_schedule: "Callable[[], BoardSchedule] | None" = None
+
     def _list_raw_postings(self) -> Iterator[BoardPosting]:
         companies = self._company_repository.list_active_companies(self.ats_platform)
+        if self.board_schedule is not None:
+            schedule = self.board_schedule()
+            due = [company for company in companies if schedule.is_due(company.ats_board_slug)]
+            logger.info(
+                "%s: %d boards today, %d quiet ones left for their day",
+                self.name,
+                len(due),
+                len(companies) - len(due),
+            )
+            companies = due
         failed_boards = 0
-        for company in companies:
+        companies = self._boards_in_order(companies)
+        for position, company in enumerate(companies):
+            if self._out_of_time():
+                logger.info(
+                    "%s: out of time; %d boards left for the next run", self.name, len(companies) - position
+                )
+                break
             try:
                 postings = self._fetch_board_postings(company.ats_board_slug)
             except HttpRequestError as error:
@@ -92,11 +116,25 @@ class AtsBoardSource(JobSource[BoardPosting]):
                 failed_boards += 1
                 logger.warning("%s: couldn't read %s's board: %s", self.name, company.name, error)
                 continue
+            # a board answering with something that isn't its feed (an error
+            # page instead of XML or JSON) is skipped; the others still count
+            except (ElementTree.ParseError, ValueError, KeyError, TypeError) as error:
+                failed_boards += 1
+                logger.warning("%s: couldn't make sense of %s's board: %s", self.name, company.name, error)
+                continue
             logger.info("%s: %d postings on %s's board", self.name, len(postings), company.name)
             for posting in postings:
                 yield BoardPosting(company, posting)
         if companies and failed_boards == len(companies):
             raise JobSourceError(f"{self.name}: none of {len(companies)} boards could be read")
+
+    # A source with a time budget per run reads boards in an order that
+    # changes each run, so the ones it doesn't reach come first next time.
+    def _boards_in_order(self, companies: list[TrackedCompany]) -> list[TrackedCompany]:
+        return companies
+
+    def _out_of_time(self) -> bool:
+        return False
 
     def _is_in_scope(self, raw_posting: BoardPosting) -> bool:
         return self._location_matcher.matches_any(self._posting_locations(raw_posting.posting))

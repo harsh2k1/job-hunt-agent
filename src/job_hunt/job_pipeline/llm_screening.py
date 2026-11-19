@@ -20,6 +20,7 @@ import hashlib
 import json
 import re
 from collections.abc import Iterable, Iterator
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from typing import Literal
 
@@ -269,19 +270,33 @@ class LlmScreening:
         report: ScreeningRunReport,
         facts: dict[str, tuple[ListingFacts, str]],
     ) -> None:
-        for batch in _chunks(listings, self._settings.batch_size):
-            by_id = {str(position): listing for position, listing in enumerate(batch)}
-            try:
-                reply = self._llm_client.ask(self._prompt(by_id), ScreeningReply, self._system_prompt, model)
-            except LlmUsageLimitError:
-                raise
-            except LlmError as error:
-                report.failed_batches += 1
-                logger.warning("LLM screening batch failed on %s: %s", model, error)
-                continue
-            answered = {by_id[item.id].key: (item, model) for item in reply.listings if item.id in by_id}
-            self._repository.save(self._screenings(batch, answered))
-            facts.update(answered)
+        # the model is asked about several batches at once (same usage, sooner
+        # done); each answer is saved here, one at a time, as it comes back
+        batches = [dict(enumerate(batch)) for batch in _chunks(listings, self._settings.batch_size)]
+        pool = ThreadPoolExecutor(max_workers=self._settings.parallel_calls)
+        pending = {pool.submit(self._ask, batch, model): batch for batch in batches}
+        try:
+            for done in as_completed(pending):
+                batch = pending[done]
+                try:
+                    reply = done.result()
+                except LlmUsageLimitError:
+                    raise
+                except LlmError as error:
+                    report.failed_batches += 1
+                    logger.warning("LLM screening batch failed on %s: %s", model, error)
+                    continue
+                by_id = {str(position): listing for position, listing in batch.items()}
+                answered = {by_id[item.id].key: (item, model) for item in reply.listings if item.id in by_id}
+                self._repository.save(self._screenings(list(batch.values()), answered))
+                facts.update(answered)
+        finally:
+            # a usage limit: batches not started yet are dropped (asked next run)
+            pool.shutdown(wait=True, cancel_futures=True)
+
+    def _ask(self, batch: dict[int, Listing], model: str) -> ScreeningReply:
+        by_id = {str(position): listing for position, listing in batch.items()}
+        return self._llm_client.ask(self._prompt(by_id), ScreeningReply, self._system_prompt, model)
 
     def _prompt(self, by_id: dict[str, Listing]) -> str:
         lines = [

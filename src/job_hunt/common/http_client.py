@@ -14,6 +14,9 @@ logger = get_logger(__name__)
 
 # worth another try: the server is busy or briefly broken
 RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
+TOO_MANY_REQUESTS = 429
+# the slowest a host is asked after telling us to slow down
+MAX_HOST_GAP_SECONDS = 30.0
 # zstd left out: httpx 0.28 fails on multi-frame zstd responses ("cannot
 # use a decompressobj multiple times", seen from amazon.jobs)
 ACCEPTED_ENCODINGS = "gzip, deflate, br"
@@ -42,6 +45,8 @@ class HttpClient:
         )
         # when each host may next be asked; sources fetched in parallel share it
         self._next_request_time_by_host: dict[str, float] = {}
+        # a host that answered "too many requests" is asked less often from then on
+        self._gap_by_host: dict[str, float] = {}
         self._host_slot_lock = threading.Lock()
 
     def get_json(
@@ -92,6 +97,8 @@ class HttpClient:
                 self._sleep_before_retry(attempt)
                 continue
 
+            if response.status_code == TOO_MANY_REQUESTS:
+                self._slow_down_for(url)
             if response.status_code in RETRYABLE_STATUS_CODES and not is_last_attempt:
                 logger.warning("%s %s returned %s, retrying", method, url, response.status_code)
                 self._sleep_before_retry(attempt, response.headers.get("Retry-After"))
@@ -109,13 +116,24 @@ class HttpClient:
     # it happens outside the lock, so other hosts aren't held up.
     def _wait_for_host_slot(self, url: str) -> None:
         host = urlparse(url).netloc
-        min_gap = self._settings.min_seconds_between_requests_to_same_host
         with self._host_slot_lock:
+            min_gap = self._gap_by_host.get(host, self._settings.min_seconds_between_requests_to_same_host)
             now = time.monotonic()
             slot = max(now, self._next_request_time_by_host.get(host, now))
             self._next_request_time_by_host[host] = slot + min_gap
         if slot > now:
             time.sleep(slot - now)
+
+    # Workday sites, for one, answer 429 at a request a second: each 429
+    # doubles that host's gap, up to MAX_HOST_GAP_SECONDS, for the client's life
+    def _slow_down_for(self, url: str) -> None:
+        host = urlparse(url).netloc
+        with self._host_slot_lock:
+            gap = self._gap_by_host.get(host, self._settings.min_seconds_between_requests_to_same_host)
+            slower = min(MAX_HOST_GAP_SECONDS, max(gap * 2, 1.0))
+            if slower > gap:
+                logger.info("%s asked us to slow down: one request every %.0f s from now on", host, slower)
+            self._gap_by_host[host] = slower
 
     def _sleep_before_retry(self, attempt: int, retry_after_header: str | None = None) -> None:
         # a server that says how long to wait knows better than our backoff

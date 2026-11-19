@@ -1,9 +1,13 @@
 import re
+import time
+from collections.abc import Iterator
+from datetime import date
 from typing import Any
 from urllib.parse import SplitResult
 
 from job_hunt.common.cache import Cache, get_cache
 from job_hunt.common.http_client import HttpClient, get_http_client
+from job_hunt.common.logger import get_logger
 from job_hunt.common.settings_schema import Settings, WorkdaySourceSettings
 from job_hunt.job_sources.advert_page_reader import (
     AdvertPage,
@@ -18,7 +22,9 @@ from job_hunt.job_sources.job_source import register_job_source
 from job_hunt.job_sources.location_matching import TargetLocationMatcher
 from job_hunt.job_sources.sitemaps import read_sitemap
 from job_hunt.job_store.company_repository import CompanyRepository
-from job_hunt.job_store.models import AtsPlatform, FetchedJob
+from job_hunt.job_store.models import AtsPlatform, FetchedJob, TrackedCompany
+
+logger = get_logger(__name__)
 
 BOARD_DOMAIN = "myworkdayjobs.com"
 # each careers site publishes its sitemap (robots.txt points to it)
@@ -56,6 +62,8 @@ class WorkdaySource(AtsBoardSource):
         self._page_reader = AdvertPageReader(
             http_client, cache, self.name, source_settings.page_cache_ttl_hours, board_link_or_none
         )
+        # when this run stops downloading job pages (time.monotonic); set per fetch
+        self._deadline: float | None = None
 
     @classmethod
     def from_settings(cls, settings: Settings) -> "WorkdaySource":
@@ -80,9 +88,35 @@ class WorkdaySource(AtsBoardSource):
             return None
         return f"{tenant}/{segments[0]}"
 
+    # Workday sites rate-limit hard and don't let up: a run spends at most
+    # max_minutes_per_run on them (job pages and board lists alike), and a
+    # board that refuses a few pages in a row is left for the next run.
+    # Cached pages are read regardless; boards not reached come first next
+    # run, so each is read within a few days.
+    def _list_raw_postings(self) -> Iterator[BoardPosting]:
+        self._deadline = time.monotonic() + self._source_settings.max_minutes_per_run * 60
+        yield from super()._list_raw_postings()
+
+    def _boards_in_order(self, companies: list[TrackedCompany]) -> list[TrackedCompany]:
+        if not companies:
+            return companies
+        # each day starts a seventh of the way further round the list
+        start = (date.today().toordinal() * max(1, len(companies) // 7)) % len(companies)
+        return companies[start:] + companies[:start]
+
+    def _out_of_time(self) -> bool:
+        return self._deadline is not None and time.monotonic() >= self._deadline
+
     def _fetch_board_postings(self, board_slug: str) -> list[dict[str, Any]]:
         links = self._links_worth_reading(self._job_page_links(board_slug))
-        batch = self._page_reader.read_pages(links, self._source_settings.max_page_downloads_per_board)
+        batch = self._page_reader.read_pages(
+            links,
+            self._source_settings.max_page_downloads_per_board,
+            deadline=self._deadline,
+            stop_after_failures=self._source_settings.stop_board_after_failures,
+        )
+        if batch.deferred:
+            logger.info("workday: %s: %d pages left for the next run", board_slug, batch.deferred)
         return [{"advert_page": page} for page in batch.pages]
 
     def _job_page_links(self, board_slug: str) -> list[AdvertPageLink]:

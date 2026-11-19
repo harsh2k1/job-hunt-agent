@@ -354,8 +354,14 @@ default:
     # sitemap, then the JobPosting markup on each job page
     workday:
       enabled: true
-      page_cache_ttl_hours: 168
-      max_page_downloads_per_board: 300
+      # adverts rarely change, and a closed job drops out of the sitemap anyway
+      page_cache_ttl_hours: 720
+      # Workday sites rate-limit hard: a big new board is read over a few runs
+      max_page_downloads_per_board: 100
+      # they also answer "too many requests" and don't let up: a run gives
+      # them this long, and a board refusing 3 pages in a row waits a run
+      max_minutes_per_run: 15
+      stop_board_after_failures: 3
       board_check_sample_pages: 15
 
   companies:
@@ -655,10 +661,14 @@ default:
     first_pass_model: haiku
     second_pass_model: sonnet
     batch_size: 20
+    # batches asked about at once: the same usage on the plan, done sooner
+    parallel_calls: 3
     title_batch_size: 150
     advert_opening_chars: 1200
     advert_key_fact_chars: 1500
-    max_listings_per_run: 300
+    # a batch of new company boards can bring 2,000 at once; 800 clears that
+    # in a few runs without nearing the plan's usage limit
+    max_listings_per_run: 800
     available_full_time_from: September 2027
     # student visa until January 2028, then the Graduate (PSW) visa for 18
     # months: graduate and full-time roles outlast it and need sponsorship
@@ -714,6 +724,10 @@ default:
     # different sites, so fetching them together is polite: each site's own
     # request gap still applies
     max_parallel_sources: 6
+    # company boards that have never had a role in your fields (most found
+    # by discovery) are read this often, a share of them each day; the rest
+    # every run
+    quiet_board_every_days: 7
 
   # The recurring run (`job-hunt schedule set`). The times, catch-up and
   # wake choices are made on the command line and kept in state_dir; these
@@ -731,7 +745,8 @@ default:
     on_time_grace_minutes: 15
     # after a wake Wi-Fi can lag; the slot stays due if it isn't back by then
     internet_wait_seconds: 180
-    # wall-clock limit for one run: a hung network call can't hold the lock
+    # limit on the time the computer is awake during one run: a run paused
+    # by sleep carries on when it wakes; one stuck while awake is stopped
     run_time_limit_minutes: 240
     # a failed run is retried at the next checks, at most this often per slot
     attempts_per_slot: 3

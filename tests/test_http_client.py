@@ -87,3 +87,16 @@ def test_requests_to_one_host_from_several_threads_stay_spaced_out():
         thread.join()
     gaps = [later - earlier for earlier, later in zip(sorted(sent_at), sorted(sent_at)[1:], strict=False)]
     assert len(sent_at) == 4 and all(spacing >= gap * 0.95 for spacing in gaps)
+
+
+def test_a_host_that_says_too_many_requests_is_asked_less_often_from_then_on():
+    answers = iter([429, 200, 200])
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(next(answers), text="ok")
+
+    client = HttpClient(settings.http, transport=httpx.MockTransport(answer))
+    client.get_text("https://acme.wd3.myworkdayjobs.com/a")
+    # its gap went from the setting (0 in tests) to a second, for every later request
+    assert client._gap_by_host["acme.wd3.myworkdayjobs.com"] == 1.0
+    assert "boards.example.com" not in client._gap_by_host

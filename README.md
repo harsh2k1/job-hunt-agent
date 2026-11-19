@@ -117,7 +117,8 @@ missed while the computer slept or was off is skipped, unless
 `--run-on-wake` is given: then it runs at the first check after the computer
 is back (several missed slots are covered by one run). The computer is never
 woken for a run. Each run waits for the internet, keeps the computer from
-sleeping until it ends, has a wall-clock time limit, and is retried up to 3
+sleeping until it ends (a closed lid on battery still sleeps; the run then
+carries on when it wakes), has a 4-hour limit on awake time, and is retried up to 3
 times if it fails. Logs: `logs/scheduled/<date>.log`; a notification shows
 each outcome.
 

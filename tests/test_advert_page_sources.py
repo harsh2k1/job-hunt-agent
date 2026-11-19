@@ -279,3 +279,32 @@ def test_student_circus_sitemap_date_changes_dont_cause_downloads(cache):
     source, fake_site = make_student_circus(STUDENT_CIRCUS_SITEMAP.replace("2026-11-01", "2026-12-01"), cache)
     source.fetch_jobs()
     assert fake_site.paths == ["/sitemap/job-sitemap.xml"]
+
+
+def test_downloads_stop_when_a_site_keeps_refusing_or_the_time_is_up():
+    import time
+
+    from job_hunt.common.cache.backends import InMemoryCacheBackend
+    from job_hunt.common.cache.cache import Cache
+    from job_hunt.common.http_client import HttpRequestError
+    from job_hunt.job_sources.advert_page_reader import AdvertPageLink, AdvertPageReader
+
+    class RefusingSite:
+        def __init__(self):
+            self.asked: list[str] = []
+
+        def get_text(self, url):
+            self.asked.append(url)
+            raise HttpRequestError(f"GET {url} returned 429", status_code=429)
+
+    links = [AdvertPageLink(f"https://acme.wd3.myworkdayjobs.com/job/{number}") for number in range(10)]
+    site = RefusingSite()
+    reader = AdvertPageReader(site, Cache(InMemoryCacheBackend(100), "t", 1), "workday", 1, lambda link: None)
+    batch = reader.read_pages(links, max_downloads=100, stop_after_failures=3)
+    # three refusals in a row: the other seven wait for the next run
+    assert (len(site.asked), batch.failed, batch.deferred) == (3, 3, 7)
+
+    late = RefusingSite()
+    reader = AdvertPageReader(late, Cache(InMemoryCacheBackend(100), "t", 1), "workday", 1, lambda link: None)
+    batch = reader.read_pages(links, max_downloads=100, deadline=time.monotonic() - 1)
+    assert (late.asked, batch.deferred) == ([], 10)

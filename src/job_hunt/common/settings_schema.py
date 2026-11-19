@@ -246,6 +246,10 @@ class WorkdaySourceSettings(AtsSourceSettings):
     # board per run (the rest come on later runs)
     page_cache_ttl_hours: float = Field(gt=0)
     max_page_downloads_per_board: int = Field(gt=0)
+    # downloading stops after this long in a run; the rest wait for the next
+    max_minutes_per_run: float = Field(gt=0)
+    # a board refusing this many pages in a row is left for the next run
+    stop_board_after_failures: int = Field(gt=0)
     # job pages read when deciding whether a newly found board has UK jobs
     board_check_sample_pages: int = Field(gt=0)
 
@@ -375,6 +379,8 @@ class LlmScreeningSettings(StrictModel):
     first_pass_model: str
     second_pass_model: str
     batch_size: int = Field(gt=0, le=50)
+    # model calls at once: the same usage, done sooner
+    parallel_calls: int = Field(ge=1, le=8)
     # titles per call in the first pass (titles only, so many fit)
     title_batch_size: int = Field(gt=0, le=300)
     # what the LLM reads of an advert: its opening, plus every line from
@@ -432,6 +438,9 @@ class DailyRunSettings(StrictModel):
     state_file: Path
     # sources fetched at the same time (requests to any one site stay spaced)
     max_parallel_sources: int = Field(ge=1)
+    # company boards that never had a role in the candidate's fields are read
+    # this often; under 14 so their jobs stay within the sheet's window
+    quiet_board_every_days: int = Field(ge=1, le=13)
 
 
 class LaunchdSchedulingSettings(StrictModel):
