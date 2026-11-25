@@ -166,6 +166,14 @@ class GoogleSheetSync:
         worksheet.resize(rows=max(len(rows), 2), cols=len(rows[0]))
         worksheet.update(rows, "A1", value_input_option="RAW")
         format_tab(worksheet, columns, rows)
+        # Everything goes in as plain text (RAW), so nothing in an advert can
+        # become a formula; a date column is the user's own, written again
+        # so its values are dates, not text.
+        for index, column in enumerate(columns):
+            if column.is_date and len(rows) > 1:
+                letter = gspread.utils.rowcol_to_a1(1, index + 1).rstrip("1")
+                values = [[row[index] if index < len(row) else ""] for row in rows[1:]]
+                worksheet.update(values, f"{letter}2", value_input_option="USER_ENTERED")
 
     def _open_spreadsheet(self) -> gspread.Spreadsheet:
         if self._sheet_settings.service_account is None or not self._sheet_settings.spreadsheet_url:

@@ -68,12 +68,17 @@ def check_tab(worksheet: gspread.Worksheet, columns: list[SheetColumn]) -> list[
             if wrap != ("WRAP" if column.wraps else "CLIP"):
                 problems.append(f"{title}: '{column.header}' row {row_number} wraps as {wrap}")
                 break
-            if ("dataValidation" in cell) != bool(column.choices):
+            if ("dataValidation" in cell) != bool(column.choices or column.is_date):
                 problems.append(
                     f"{title}: '{column.header}' row {row_number} dropdown is {'dataValidation' in cell}"
                 )
                 break
-            if cell.get("hyperlink") and column.header != LINK_COLUMN:
+            # Google links text that looks like an address on its own
+            # ("jobs.ac.uk" under Found on); only a link elsewhere is wrong
+            auto_linked = (
+                str(cell.get("hyperlink", "")).rstrip("/").endswith(cell.get("formattedValue", "\0"))
+            )
+            if cell.get("hyperlink") and column.header != LINK_COLUMN and not auto_linked:
                 problems.append(f"{title}: '{column.header}' row {row_number} carries a link")
                 break
             if column.header == LINK_COLUMN and cell.get("formattedValue") and not cell.get("hyperlink"):

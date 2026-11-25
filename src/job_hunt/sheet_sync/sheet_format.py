@@ -9,7 +9,14 @@ from typing import Any
 
 import gspread
 
-from job_hunt.sheet_sync.sheet_rows import CLOSES_COLUMN, KEY_COLUMN, LINK_COLUMN, SheetColumn
+from job_hunt.sheet_sync.sheet_rows import (
+    CLOSES_COLUMN,
+    DEALT_WITH_STATUSES,
+    KEY_COLUMN,
+    LINK_COLUMN,
+    STATUS_COLUMN,
+    SheetColumn,
+)
 
 HEADER_BACKGROUND = {"red": 0.17, "green": 0.24, "blue": 0.36}
 WHITE = {"red": 1, "green": 1, "blue": 1}
@@ -31,6 +38,7 @@ CLOSING_SOON_FORMAT = {
     "backgroundColor": {"red": 0.98, "green": 0.78, "blue": 0.78},
     "textFormat": {"bold": True, "foregroundColor": {"red": 0.6, "green": 0.0, "blue": 0.0}},
 }
+DATE_PATTERN = "yyyy-mm-dd"
 HEADER_ROW_PIXELS = 34
 BODY_ROW_PIXELS = 24
 # a tab with a wrapping column shows up to four lines of it per row
@@ -62,6 +70,8 @@ def format_tab(worksheet: gspread.Worksheet, columns: list[SheetColumn], rows: l
         if column.choices:
             requests.append(_dropdown(sheet_id, index, row_count, column.choices))
             requests += _choice_colours(sheet_id, index, row_count, column.choices)
+        if column.is_date:
+            requests += _date_column(sheet_id, index, row_count)
     headers = [column.header for column in columns]
     if LINK_COLUMN in headers:
         requests.append(_clickable_links(sheet_id, headers.index(LINK_COLUMN), rows))
@@ -223,16 +233,27 @@ def _choice_colours(
 
 
 # Worked out by the sheet against TODAY(), so it's right every day, not
-# just on the day of a sync. Closes holds an ISO date (2026-11-20).
-def closing_soon_formula(closes_index: int) -> str:
-    closes = gspread.utils.rowcol_to_a1(2, closes_index + 1).rstrip("0123456789")
-    cell = f"${closes}2"
-    return f'=AND({cell}<>"", DATEVALUE({cell})>=TODAY(), DATEVALUE({cell})<=TODAY()+{CLOSING_SOON_DAYS})'
+# just on the day of a sync. Closes holds an ISO date (2026-11-20). A row
+# whose Status says the user has dealt with it isn't marked.
+def closing_soon_formula(closes_index: int, status_index: int | None = None) -> str:
+    cell = f"${_column_letter(closes_index)}2"
+    soon = f'{cell}<>"", DATEVALUE({cell})>=TODAY(), DATEVALUE({cell})<=TODAY()+{CLOSING_SOON_DAYS}'
+    if status_index is None:
+        return f"=AND({soon})"
+    status = f"${_column_letter(status_index)}2"
+    dealt_with = ", ".join(f'{status}="{value}"' for value in DEALT_WITH_STATUSES)
+    return f"=AND({soon}, NOT(OR({dealt_with})))"
+
+
+def _column_letter(index: int) -> str:
+    return gspread.utils.rowcol_to_a1(2, index + 1).rstrip("0123456789")
 
 
 def _closing_soon(
     sheet_id: int, columns: list[SheetColumn], closes_index: int, row_count: int
 ) -> list[dict[str, Any]]:
+    headers = [column.header for column in columns]
+    status_index = headers.index(STATUS_COLUMN) if STATUS_COLUMN in headers else None
     return [
         {
             "addConditionalFormatRule": {
@@ -241,7 +262,9 @@ def _closing_soon(
                     "booleanRule": {
                         "condition": {
                             "type": "CUSTOM_FORMULA",
-                            "values": [{"userEnteredValue": closing_soon_formula(closes_index)}],
+                            "values": [
+                                {"userEnteredValue": closing_soon_formula(closes_index, status_index)}
+                            ],
                         },
                         "format": CLOSING_SOON_FORMAT,
                     },
@@ -251,6 +274,27 @@ def _closing_soon(
         }
         for index, column in enumerate(columns)
         if column.marks_closing_soon
+    ]
+
+
+# A date picker (double-click a cell) and dates shown as 2026-11-25; other
+# text is still allowed, only flagged.
+def _date_column(sheet_id: int, column: int, row_count: int) -> list[dict[str, Any]]:
+    cells = _range(sheet_id, 1, row_count, column, column + 1)
+    return [
+        {
+            "setDataValidation": {
+                "range": cells,
+                "rule": {"condition": {"type": "DATE_IS_VALID"}, "strict": False},
+            }
+        },
+        {
+            "repeatCell": {
+                "range": cells,
+                "cell": {"userEnteredFormat": {"numberFormat": {"type": "DATE", "pattern": DATE_PATTERN}}},
+                "fields": "userEnteredFormat.numberFormat",
+            }
+        },
     ]
 
 

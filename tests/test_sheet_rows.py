@@ -38,9 +38,9 @@ def test_jobs_tab_has_numbered_rows_in_a_fixed_column_order():
     )
     header = rows[0]
     assert header == [
-        "#", "First fetched", "Role", "Company", "Status", "Advert link", "Kind", "Found on", "Posted",
-        "Closes", "Why it's valid", "JD", "Location", "Type", "Also on", "Found by", "Sponsorship in advert",
-        "Sponsor licence", "Start", "Salary", "Verdict", "Notes", KEY_COLUMN,
+        "#", "First fetched", "Role", "Company", "Status", "Applied on", "Advert link", "Kind", "Found on",
+        "Posted", "Closes", "Why it's valid", "JD", "Location", "Type", "Also on", "Found by",
+        "Sponsorship in advert", "Sponsor licence", "Start", "Salary", "Verdict", "Notes", KEY_COLUMN,
     ]  # fmt: skip
     # the row, since when, what it is and the user's status stay in view
     assert [column.header for column in COLUMNS if column.frozen] == [
@@ -137,3 +137,11 @@ def test_a_status_kept_under_a_merged_listing_key_stays_with_the_listing():
                      merged_keys=("acme|graduate data scientist|uk",))  # fmt: skip
     rows = build_jobs_rows([merged], COLUMNS, user_cells, NO_VERDICT)
     assert rows[1][rows[0].index("Status")] == "Applied"
+
+
+def test_a_row_marked_duplicate_goes_to_the_bottom_and_keeps_its_status():
+    user_cells = read_user_cells([["Status", KEY_COLUMN], ["Duplicate", "a"]])
+    rows = jobs_rows([listing("a", "Research Fellow", 2), listing("b", "Research Fellow", 30)], user_cells)
+    header = rows[0]
+    assert [row[header.index(KEY_COLUMN)] for row in rows[1:]] == ["b", "a"]
+    assert rows[2][header.index("Status")] == "Duplicate"

@@ -20,6 +20,7 @@ KEY_COLUMN = "Listing key"
 SEQUENCE_COLUMN = "#"
 LINK_COLUMN = "Advert link"
 CLOSES_COLUMN = "Closes"
+STATUS_COLUMN = "Status"
 # Google Sheets holds at most 50,000 characters in a cell
 MAX_CELL_CHARACTERS = 45_000
 FOUND_BY_AGENT = "agent"
@@ -29,8 +30,12 @@ VERDICT_ORDER = {"apply": 0, "check": 1, NOT_SCREENED: 2}
 # sheet_format.PASTELS). Such a column gets a dropdown and colour rules.
 STATUS_CHOICES = {
     "To apply": "blue", "Applied": "purple", "Interviewing": "orange", "Offer": "green",
-    "Rejected": "red", "Not interested": "grey",
+    "Rejected": "red", "Not interested": "grey", "Duplicate": "grey",
 }  # fmt: skip
+# rows the user has put aside go to the bottom of their tab
+PUT_ASIDE_STATUSES = frozenset({"Duplicate"})
+# rows the user has dealt with: a near deadline no longer turns them red
+DEALT_WITH_STATUSES = ("Applied", "Interviewing", "Offer", "Rejected", "Not interested", "Duplicate")
 KIND_CHOICES = {
     "graduate": "green", "internship": "blue", "part-time": "teal", "full-time": "orange",
     "freelance": "red", "studentship": "purple", "other": "grey",
@@ -94,6 +99,8 @@ class SheetColumn:
     marks_closing_soon: bool = False
     # stays in view while scrolling across; frozen columns come first
     frozen: bool = False
+    # holds dates: a date picker, shown as 2026-11-25, written back as dates
+    is_date: bool = False
 
     @property
     def belongs_to_user(self) -> bool:
@@ -137,6 +144,8 @@ def jobs_columns(
         SheetColumn("Role", 300, lambda listing: listing.primary.title, marks_closing_soon=True, frozen=True),
         SheetColumn("Company", 180, lambda listing: listing.primary.company_name, frozen=True),
         SheetColumn("Status", 120, centred=True, choices=STATUS_CHOICES, frozen=True),
+        # the user's: when they applied
+        SheetColumn("Applied on", 110, centred=True, is_date=True),
         # where to read it, what kind it is, where it was found and its dates
         SheetColumn(LINK_COLUMN, 260, lambda listing: listing.primary.url),
         SheetColumn(
@@ -237,17 +246,16 @@ def _jobs_order(listing: Listing, verdict_of: VerdictOf) -> tuple[int, bool, str
     )
 
 
+# what the user typed for this listing, under its key or one merged into it
+def _kept_cells(listing: Listing, user_cells: UserCells) -> dict[str, str]:
+    keys = (listing.key, *listing.merged_keys)
+    return next((user_cells.by_key[key] for key in keys if key in user_cells.by_key), {})
+
+
 def build_rows(columns: list[SheetColumn], listings: list[Listing], user_cells: UserCells) -> list[list[str]]:
     rows = [[column.header for column in columns]]
     for listing in listings:
-        kept = next(
-            (
-                user_cells.by_key[key]
-                for key in (listing.key, *listing.merged_keys)
-                if key in user_cells.by_key
-            ),
-            {},
-        )
+        kept = _kept_cells(listing, user_cells)
         rows.append([_cell(column, listing, kept, len(rows)) for column in columns])
     # the user's own rows, after the agent's, each value under its own header
     for own_row in user_cells.own_rows:
@@ -273,8 +281,11 @@ def _cell(column: SheetColumn, listing: Listing, user_cells: dict[str, str], pos
 def build_jobs_rows(
     listings: list[Listing], columns: list[SheetColumn], user_cells: UserCells, verdict_of: VerdictOf
 ) -> list[list[str]]:
-    ordered = sorted(listings, key=lambda listing: _jobs_order(listing, verdict_of))
-    return build_rows(columns, ordered, user_cells)
+    def order(listing: Listing) -> tuple[bool, tuple[int, bool, str, float]]:
+        put_aside = _kept_cells(listing, user_cells).get("Status") in PUT_ASIDE_STATUSES
+        return put_aside, _jobs_order(listing, verdict_of)
+
+    return build_rows(columns, sorted(listings, key=order), user_cells)
 
 
 # grouped by reason, newest first within each

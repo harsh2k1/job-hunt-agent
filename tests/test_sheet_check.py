@@ -19,7 +19,7 @@ def good_cell(column, row_number: int) -> dict:
             "wrapStrategy": "WRAP" if column.wraps else "CLIP",
         }
     }
-    if column.choices:
+    if column.choices or column.is_date:
         cell["dataValidation"] = {"condition": {"type": "ONE_OF_LIST"}}
     if column.header == LINK_COLUMN:
         cell.update(
@@ -128,12 +128,27 @@ def test_a_value_outside_a_columns_dropdown_is_caught_but_the_users_status_is_fr
     ]
 
 
-def test_the_closing_soon_rule_reads_the_closes_column_against_today():
+def test_the_closing_soon_rule_reads_the_closes_column_against_today_and_skips_rows_dealt_with():
     from job_hunt.sheet_sync.sheet_format import closing_soon_formula
 
-    closes = [column.header for column in COLUMNS].index("Closes")
-    letter = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"[closes]
-    assert closing_soon_formula(closes) == (
-        f'=AND(${letter}2<>"", DATEVALUE(${letter}2)>=TODAY(), DATEVALUE(${letter}2)<=TODAY()+7)'
+    headers = [column.header for column in COLUMNS]
+    closes = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"[headers.index("Closes")]
+    status = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"[headers.index("Status")]
+    formula = closing_soon_formula(headers.index("Closes"), headers.index("Status"))
+    assert formula.startswith(
+        f'=AND(${closes}2<>"", DATEVALUE(${closes}2)>=TODAY(), DATEVALUE(${closes}2)<=TODAY()+7, NOT(OR('
     )
+    assert f'${status}2="Applied"' in formula and f'${status}2="Duplicate"' in formula
+    assert f'${status}2="To apply"' not in formula
     assert [column.header for column in COLUMNS if column.marks_closing_soon] == ["#", "Role", "Closes"]
+
+
+def test_a_site_name_google_links_by_itself_is_not_a_defect():
+    metadata = copy.deepcopy(good_metadata())
+    cell(metadata, 1, "Found on").update(formattedValue="jobs.ac.uk", hyperlink="http://jobs.ac.uk")
+    assert check_tab(FakeWorksheet(metadata), COLUMNS) == []
+    cell(metadata, 1, "Found on").update(formattedValue="LinkedIn", hyperlink="https://evil.example.com")
+    assert any(
+        "'Found on' row 2 carries a link" in problem
+        for problem in check_tab(FakeWorksheet(metadata), COLUMNS)
+    )
